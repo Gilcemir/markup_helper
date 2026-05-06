@@ -1,0 +1,1 @@
+https://scielo.readthedocs.io/projects/scielo-pc-programs/en/latest/pt_how_to_generate_xml-prepara.html

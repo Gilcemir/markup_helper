@@ -1,0 +1,26 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+
+## Test results
+TestResults/
+*.trx
+*.coverage
+coverage*.xml
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Editors
+.idea/
+*.swp
+.vscode/
+
+## Build artifacts
+publish/
+out/
