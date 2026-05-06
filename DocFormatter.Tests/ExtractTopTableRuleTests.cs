@@ -94,7 +94,7 @@ public sealed class ExtractTopTableRuleTests
     }
 
     [Fact]
-    public void Apply_WhenDoiCellInvalid_FindsDoiInAnotherCell_AndLogsWarn()
+    public void Apply_WhenDoiCellInvalid_FindsDoiInAnotherCell_AndElocationFallsBack()
     {
         var table = BuildThreeByOneTable(
             BuildCell("ART01"),
@@ -107,13 +107,86 @@ public sealed class ExtractTopTableRuleTests
 
         rule.Apply(doc, ctx, report);
 
-        Assert.Equal("10.5678/xyz", ctx.ElocationId);
         Assert.Equal("10.5678/xyz", ctx.Doi);
+        Assert.Equal(string.Empty, ctx.ElocationId);
         Assert.Empty(GetBody(doc).Elements<Table>());
         Assert.Contains(
             report.Entries,
             e => e.Level == ReportLevel.Warn
                 && e.Message.Contains("DOI cell did not match", StringComparison.Ordinal));
+        Assert.Contains(
+            report.Entries,
+            e => e.Level == ReportLevel.Warn
+                && e.Message.Contains("ELOCATION-shaped value", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_WhenDoiCellWrappedInDoiOrgUrl_StripsPrefix_AndExtractsDoi()
+    {
+        var table = BuildThreeByOneTable(
+            BuildCell("id", "ART01"),
+            BuildCell("elocation", "e2024001"),
+            BuildCell("doi", "http://dx.doi.org/10.1234/abc"));
+        using var doc = CreateDocumentWith(table);
+        var rule = new ExtractTopTableRule(new FormattingOptions());
+        var ctx = new FormattingContext();
+        var report = new Report();
+
+        rule.Apply(doc, ctx, report);
+
+        Assert.Equal("10.1234/abc", ctx.Doi);
+        Assert.Equal("e2024001", ctx.ElocationId);
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Warn);
+    }
+
+    [Fact]
+    public void Apply_WhenPositionalCellsReorderedDoiThenElocation_RecoversBothFromOtherCells()
+    {
+        var table = BuildThreeByOneTable(
+            BuildCell("ART01"),
+            BuildCell("https://doi.org/10.1234/abc"),
+            BuildCell("e2024001"));
+        using var doc = CreateDocumentWith(table);
+        var rule = new ExtractTopTableRule(new FormattingOptions());
+        var ctx = new FormattingContext();
+        var report = new Report();
+
+        rule.Apply(doc, ctx, report);
+
+        Assert.Equal("10.1234/abc", ctx.Doi);
+        Assert.Equal("e2024001", ctx.ElocationId);
+        Assert.Empty(GetBody(doc).Elements<Table>());
+        Assert.Contains(
+            report.Entries,
+            e => e.Level == ReportLevel.Warn
+                && e.Message.Contains("positional ELOCATION cell did not match shape", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_WhenHeaderCellUsesSoftLineBreak_DetectsHeaderInsteadOfPositionalFallback()
+    {
+        var idCell = new TableCell(
+            new Paragraph(
+                new Run(
+                    new Text("id") { Space = SpaceProcessingModeValues.Preserve },
+                    new Break(),
+                    new Text("ART01") { Space = SpaceProcessingModeValues.Preserve })));
+        var table = BuildThreeByOneTable(
+            idCell,
+            BuildCell("elocation", "e2024001"),
+            BuildCell("doi", "10.1234/abc"));
+        using var doc = CreateDocumentWith(table);
+        var rule = new ExtractTopTableRule(new FormattingOptions());
+        var ctx = new FormattingContext();
+        var report = new Report();
+
+        rule.Apply(doc, ctx, report);
+
+        Assert.Equal("10.1234/abc", ctx.Doi);
+        Assert.Equal("e2024001", ctx.ElocationId);
+        Assert.DoesNotContain(
+            report.Entries,
+            e => e.Level == ReportLevel.Warn && e.Message.Contains("positional", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

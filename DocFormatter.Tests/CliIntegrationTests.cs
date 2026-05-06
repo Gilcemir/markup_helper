@@ -67,6 +67,22 @@ public sealed class CliIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void Run_NonDocxFileExtension_PrintsErrorToStderr_ReturnsUsageError()
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var txtPath = Path.Combine(_tempDir, "wrong-ext.txt");
+        File.WriteAllText(txtPath, "not a docx");
+
+        var exit = CliApp.Run(new[] { txtPath }, stdout, stderr);
+
+        Assert.Equal(1, exit);
+        Assert.Contains(".docx", stderr.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(stdout.ToString());
+        Assert.False(Directory.Exists(Path.Combine(_tempDir, "formatted")));
+    }
+
+    [Fact]
     public void Run_PathDoesNotExist_PrintsErrorToStderr_ReturnsUsageError()
     {
         var stdout = new StringWriter();

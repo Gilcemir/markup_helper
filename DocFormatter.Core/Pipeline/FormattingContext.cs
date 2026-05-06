@@ -11,6 +11,4 @@ public sealed class FormattingContext
     public string? ArticleTitle { get; set; }
 
     public List<Author> Authors { get; } = new();
-
-    internal Dictionary<int, string> OrcidStaging { get; } = new();
 }

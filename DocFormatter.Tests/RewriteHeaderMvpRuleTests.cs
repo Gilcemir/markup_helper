@@ -120,10 +120,10 @@ public sealed class RewriteHeaderMvpRuleTests
     }
 
     [Fact]
-    public void Apply_WithEmptyAuthorsList_ThrowsCriticalReferencingAuthors()
+    public void Apply_WithEmptyAuthorsList_LogsWarn_StillWritesDoiLine_AndLeavesPlaceholderParagraphIntact()
     {
         using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
-            AuthorsParagraphFactory.TextRun("ignored"));
+            AuthorsParagraphFactory.TextRun("placeholder text"));
 
         var ctx = new FormattingContext
         {
@@ -132,9 +132,16 @@ public sealed class RewriteHeaderMvpRuleTests
         };
 
         var report = new Report();
-        var ex = Assert.Throws<InvalidOperationException>(() => CreateRule().Apply(doc, ctx, report));
-        Assert.Equal(RewriteHeaderMvpRule.EmptyAuthorsMessage, ex.Message);
-        Assert.Contains("Authors", ex.Message, StringComparison.Ordinal);
+        CreateRule().Apply(doc, ctx, report);
+
+        var paragraphs = AuthorsParagraphFactory.GetBody(doc).Elements<Paragraph>().ToList();
+        Assert.Equal("10.1234/abc", ParagraphText(paragraphs[0]));
+        Assert.Equal(AuthorsParagraphFactory.SectionText, ParagraphText(paragraphs[1]));
+        Assert.Equal(AuthorsParagraphFactory.TitleText, ParagraphText(paragraphs[2]));
+        Assert.Equal("placeholder text", ParagraphText(paragraphs[3]));
+
+        var warn = Assert.Single(report.Entries, e => e.Level == ReportLevel.Warn);
+        Assert.Equal(RewriteHeaderMvpRule.EmptyAuthorsMessage, warn.Message);
     }
 
     [Fact]
@@ -258,6 +265,52 @@ public sealed class RewriteHeaderMvpRuleTests
     }
 
     [Fact]
+    public void Pipeline_FullFiveRules_WhenAuthorsParagraphMissing_StillWritesDoiLineAndWarns()
+    {
+        var grid = new TableGrid(
+            new GridColumn { Width = "1000" },
+            new GridColumn { Width = "1000" },
+            new GridColumn { Width = "1000" });
+        var table = new Table(
+            grid,
+            new TableRow(
+                new TableCell(new Paragraph(new Run(new Text("ART01")))),
+                new TableCell(new Paragraph(new Run(new Text("e2024001")))),
+                new TableCell(new Paragraph(new Run(new Text("10.1234/abc"))))));
+        var section = new Paragraph(new Run(new Text(AuthorsParagraphFactory.SectionText)));
+        var title = new Paragraph(new Run(new Text(AuthorsParagraphFactory.TitleText)));
+
+        var stream = new MemoryStream();
+        using var doc = WordprocessingDocument.Create(stream, WordprocessingDocumentType.Document);
+        var mainPart = doc.AddMainDocumentPart();
+        mainPart.Document = new Document(new Body(table, section, title));
+
+        var pipeline = new FormattingPipeline(new IFormattingRule[]
+        {
+            new ExtractTopTableRule(new FormattingOptions()),
+            new ParseHeaderLinesRule(),
+            new ExtractAuthorsRule(new FormattingOptions()),
+            new RewriteHeaderMvpRule(),
+        });
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        pipeline.Run(doc, ctx, report);
+
+        var paragraphs = mainPart.Document.Body!.Elements<Paragraph>().ToList();
+        Assert.Equal("10.1234/abc", ParagraphText(paragraphs[0]));
+        Assert.Equal(AuthorsParagraphFactory.SectionText, ParagraphText(paragraphs[1]));
+        Assert.Equal(AuthorsParagraphFactory.TitleText, ParagraphText(paragraphs[2]));
+        Assert.Empty(mainPart.Document.Body!.Elements<Table>());
+
+        Assert.Empty(ctx.Authors);
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
+        Assert.Contains(
+            report.Entries,
+            e => e.Level == ReportLevel.Warn && e.Message == RewriteHeaderMvpRule.EmptyAuthorsMessage);
+    }
+
+    [Fact]
     public void Pipeline_FullFiveRules_WithTwoAuthorsAndOneOrcid_ProducesExpectedHeader()
     {
         var grid = new TableGrid(
@@ -288,8 +341,7 @@ public sealed class RewriteHeaderMvpRuleTests
         {
             new ExtractTopTableRule(new FormattingOptions()),
             new ParseHeaderLinesRule(),
-            new ExtractOrcidLinksRule(new FormattingOptions()),
-            new ParseAuthorsRule(new FormattingOptions()),
+            new ExtractAuthorsRule(new FormattingOptions()),
             new RewriteHeaderMvpRule(),
         });
 

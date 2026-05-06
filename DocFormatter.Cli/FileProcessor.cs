@@ -64,6 +64,10 @@ internal sealed class FileProcessor
             using var doc = WordprocessingDocument.Open(copyPath, isEditable: true);
             pipeline.Run(doc, ctx, report);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             aborted = true;

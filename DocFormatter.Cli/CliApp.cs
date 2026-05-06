@@ -56,6 +56,12 @@ internal static class CliApp
 
         if (File.Exists(path))
         {
+            if (!string.Equals(Path.GetExtension(path), ".docx", StringComparison.OrdinalIgnoreCase))
+            {
+                stderr.WriteLine($"error: only .docx files are supported, got '{Path.GetExtension(path)}'");
+                return ExitUsageError;
+            }
+
             return RunSingleFile(path, stdout, stderr);
         }
 
@@ -194,8 +200,7 @@ internal static class CliApp
 
         services.AddTransient<IFormattingRule, ExtractTopTableRule>();
         services.AddTransient<IFormattingRule, ParseHeaderLinesRule>();
-        services.AddTransient<IFormattingRule, ExtractOrcidLinksRule>();
-        services.AddTransient<IFormattingRule, ParseAuthorsRule>();
+        services.AddTransient<IFormattingRule, ExtractAuthorsRule>();
         services.AddTransient<IFormattingRule, RewriteHeaderMvpRule>();
         services.AddTransient<IFormattingRule, LocateAbstractAndInsertElocationRule>();
 

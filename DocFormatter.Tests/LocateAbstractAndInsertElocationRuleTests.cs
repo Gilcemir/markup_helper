@@ -236,6 +236,56 @@ public sealed class LocateAbstractAndInsertElocationRuleTests
     }
 
     [Fact]
+    public void Apply_WithLeadingWhitespaceRunBeforeBoldAbstract_StillMatches()
+    {
+        var section = PlainParagraph("Original Article");
+        var title = PlainParagraph("On the Behavior of Title");
+        var leadingEmptyRun = new Run(new Text("   ") { Space = SpaceProcessingModeValues.Preserve });
+        var boldAbstract = new Run(
+            new RunProperties(new Bold()),
+            new Text("Abstract") { Space = SpaceProcessingModeValues.Preserve });
+        var tail = new Run(new Text(" — body") { Space = SpaceProcessingModeValues.Preserve });
+        var abstractPara = new Paragraph(leadingEmptyRun, boldAbstract, tail);
+
+        using var doc = CreateDocumentWith(section, title, abstractPara);
+
+        var ctx = new FormattingContext { ElocationId = "e2024010" };
+        var report = new Report();
+
+        CreateRule().Apply(doc, ctx, report);
+
+        var paragraphs = GetBody(doc).Elements<Paragraph>().ToList();
+        Assert.Equal(4, paragraphs.Count);
+        Assert.Equal("e2024010", ParagraphText(paragraphs[2]));
+        Assert.Same(abstractPara, paragraphs[3]);
+        Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
+    }
+
+    [Fact]
+    public void Apply_WithNonBoldRunFollowedByBoldAbstract_DoesNotMatch()
+    {
+        var section = PlainParagraph("Original Article");
+        var title = PlainParagraph("Title");
+        var nonBoldLead = new Run(new Text("note: ") { Space = SpaceProcessingModeValues.Preserve });
+        var boldAbstract = new Run(
+            new RunProperties(new Bold()),
+            new Text("Abstract") { Space = SpaceProcessingModeValues.Preserve });
+        var paragraph = new Paragraph(nonBoldLead, boldAbstract);
+
+        using var doc = CreateDocumentWith(section, title, paragraph);
+
+        var ctx = new FormattingContext { ElocationId = "e2024011" };
+        var report = new Report();
+
+        CreateRule().Apply(doc, ctx, report);
+
+        var paragraphs = GetBody(doc).Elements<Paragraph>().ToList();
+        Assert.Equal(3, paragraphs.Count);
+        var warn = Assert.Single(report.Entries, e => e.Level == ReportLevel.Warn);
+        Assert.Equal(LocateAbstractAndInsertElocationRule.AbstractNotFoundMessage, warn.Message);
+    }
+
+    [Fact]
     public void Apply_WithMultipleAbstractCandidates_InsertsAboveFirstMatch()
     {
         var section = PlainParagraph("Original Article");
@@ -292,8 +342,7 @@ public sealed class LocateAbstractAndInsertElocationRuleTests
         {
             new ExtractTopTableRule(new FormattingOptions()),
             new ParseHeaderLinesRule(),
-            new ExtractOrcidLinksRule(new FormattingOptions()),
-            new ParseAuthorsRule(new FormattingOptions()),
+            new ExtractAuthorsRule(new FormattingOptions()),
             new RewriteHeaderMvpRule(),
             new LocateAbstractAndInsertElocationRule(new FormattingOptions()),
         });

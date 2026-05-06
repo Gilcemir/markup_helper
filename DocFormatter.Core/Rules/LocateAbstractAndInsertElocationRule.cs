@@ -63,24 +63,29 @@ public sealed class LocateAbstractAndInsertElocationRule : IFormattingRule
     {
         foreach (var paragraph in body.Elements<Paragraph>())
         {
-            var firstRun = paragraph.Descendants<Run>().FirstOrDefault();
-            if (firstRun is null || !IsBold(firstRun))
+            foreach (var run in paragraph.Descendants<Run>())
             {
-                continue;
-            }
-
-            var text = firstRun.InnerText.TrimStart();
-            if (text.Length == 0)
-            {
-                continue;
-            }
-
-            foreach (var marker in _options.AbstractMarkers)
-            {
-                if (text.StartsWith(marker, StringComparison.OrdinalIgnoreCase))
+                var raw = run.InnerText;
+                if (string.IsNullOrWhiteSpace(raw))
                 {
-                    return paragraph;
+                    continue;
                 }
+
+                if (!IsBold(run))
+                {
+                    break;
+                }
+
+                var trimmed = raw.TrimStart();
+                foreach (var marker in _options.AbstractMarkers)
+                {
+                    if (trimmed.StartsWith(marker, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return paragraph;
+                    }
+                }
+
+                break;
             }
         }
 

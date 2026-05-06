@@ -35,35 +35,37 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
             throw new InvalidOperationException(MissingArticleTitleMessage);
         }
 
-        if (ctx.Authors.Count == 0)
-        {
-            throw new InvalidOperationException(EmptyAuthorsMessage);
-        }
-
         var body = doc.MainDocumentPart?.Document?.Body
             ?? throw new InvalidOperationException("document is missing its body");
-
-        var authorsParagraph = HeaderParagraphLocator.FindAuthorsParagraph(body)
-            ?? throw new InvalidOperationException(MissingAuthorsParagraphMessage);
 
         var renderableAuthors = ctx.Authors
             .Where(a => !string.IsNullOrWhiteSpace(a.Name))
             .ToList();
 
-        var newElements = new List<OpenXmlElement> { new Paragraph() };
-        foreach (var author in renderableAuthors)
+        if (ctx.Authors.Count == 0)
         {
-            newElements.Add(BuildAuthorParagraph(author));
+            report.Warn(Name, EmptyAuthorsMessage);
         }
-
-        OpenXmlElement insertAfter = authorsParagraph;
-        foreach (var element in newElements)
+        else
         {
-            body.InsertAfter(element, insertAfter);
-            insertAfter = element;
-        }
+            var authorsParagraph = HeaderParagraphLocator.FindAuthorsParagraph(body)
+                ?? throw new InvalidOperationException(MissingAuthorsParagraphMessage);
 
-        authorsParagraph.Remove();
+            var newElements = new List<OpenXmlElement> { new Paragraph() };
+            foreach (var author in renderableAuthors)
+            {
+                newElements.Add(BuildAuthorParagraph(author));
+            }
+
+            OpenXmlElement insertAfter = authorsParagraph;
+            foreach (var element in newElements)
+            {
+                body.InsertAfter(element, insertAfter);
+                insertAfter = element;
+            }
+
+            authorsParagraph.Remove();
+        }
 
         if (ctx.Doi is not null)
         {

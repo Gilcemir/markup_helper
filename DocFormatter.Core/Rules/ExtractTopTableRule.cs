@@ -1,3 +1,4 @@
+using System.Text;
 using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
 using DocumentFormat.OpenXml.Packaging;
@@ -59,19 +60,15 @@ public sealed class ExtractTopTableRule : IFormattingRule
             doiValue = cellTexts[2];
         }
 
-        ctx.ElocationId = elocationValue;
-        if (string.IsNullOrWhiteSpace(elocationValue))
+        var normalizedCells = cellTexts.Select(StripDoiUrlPrefix).ToList();
+        var normalizedPositionalDoi = StripDoiUrlPrefix(doiValue);
+        if (!string.IsNullOrEmpty(normalizedPositionalDoi) && _options.DoiRegex.IsMatch(normalizedPositionalDoi))
         {
-            report.Warn(Name, "elocation cell is empty");
-        }
-
-        if (!string.IsNullOrEmpty(doiValue) && _options.DoiRegex.IsMatch(doiValue))
-        {
-            ctx.Doi = doiValue;
+            ctx.Doi = normalizedPositionalDoi;
         }
         else
         {
-            var fallbackDoi = new[] { idValue, elocationValue }
+            var fallbackDoi = normalizedCells
                 .FirstOrDefault(v => !string.IsNullOrEmpty(v) && _options.DoiRegex.IsMatch(v));
             if (fallbackDoi is not null)
             {
@@ -85,6 +82,17 @@ public sealed class ExtractTopTableRule : IFormattingRule
                 ctx.Doi = null;
                 report.Warn(Name, "no cell contains a DOI-shaped value; setting Doi=null");
             }
+        }
+
+        if (headerMapping is null)
+        {
+            elocationValue = ResolveElocation(elocationValue, cellTexts, report);
+        }
+
+        ctx.ElocationId = elocationValue;
+        if (string.IsNullOrWhiteSpace(elocationValue))
+        {
+            report.Warn(Name, "elocation cell is empty");
         }
 
         table.Remove();
@@ -184,8 +192,72 @@ public sealed class ExtractTopTableRule : IFormattingRule
 
     private static string GetCellPlainText(TableCell cell)
     {
-        var paragraphs = cell.Elements<Paragraph>()
-            .Select(p => string.Concat(p.Descendants<Text>().Select(t => t.Text)));
-        return string.Join('\n', paragraphs);
+        var sb = new StringBuilder();
+        var firstParagraph = true;
+        foreach (var paragraph in cell.Elements<Paragraph>())
+        {
+            if (!firstParagraph)
+            {
+                sb.Append('\n');
+            }
+            firstParagraph = false;
+
+            foreach (var node in paragraph.Descendants())
+            {
+                switch (node)
+                {
+                    case Text t:
+                        sb.Append(t.Text);
+                        break;
+                    case Break:
+                        sb.Append('\n');
+                        break;
+                    case TabChar:
+                        sb.Append('\t');
+                        break;
+                }
+            }
+        }
+        return sb.ToString();
+    }
+
+    private string StripDoiUrlPrefix(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        var trimmed = value.Trim();
+        foreach (var prefix in _options.DoiUrlPrefixes)
+        {
+            if (trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed[prefix.Length..];
+            }
+        }
+
+        return trimmed;
+    }
+
+    private string ResolveElocation(string elocationValue, IReadOnlyList<string> allCells, IReport report)
+    {
+        if (string.IsNullOrWhiteSpace(elocationValue) || _options.ElocationRegex.IsMatch(elocationValue))
+        {
+            return elocationValue;
+        }
+
+        var fallback = allCells
+            .FirstOrDefault(v => !string.IsNullOrEmpty(v) && _options.ElocationRegex.IsMatch(v));
+        if (fallback is not null)
+        {
+            report.Warn(
+                Name,
+                $"positional ELOCATION cell did not match shape; using ELOCATION-shaped value from another cell: '{fallback}'");
+            return fallback;
+        }
+
+        report.Warn(Name, "no cell contains an ELOCATION-shaped value; setting ElocationId=empty");
+        return string.Empty;
     }
 }
