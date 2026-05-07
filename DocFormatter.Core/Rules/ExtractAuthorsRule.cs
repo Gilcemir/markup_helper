@@ -60,18 +60,8 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
                 builders.Add(new AuthorBuilder());
             }
 
-            foreach (var child in paragraph.ChildElements)
-            {
-                switch (child)
-                {
-                    case Run run:
-                        HandleRun(run, builders);
-                        break;
-                    case Hyperlink hyperlink:
-                        HandleHyperlink(hyperlink, mainPart, builders, paragraph, hyperlinksToRemove, relationshipsToDelete, report);
-                        break;
-                }
-            }
+            var tokens = TokenizeParagraph(paragraph, mainPart, hyperlinksToRemove, relationshipsToDelete, report);
+            ConsumeTokens(tokens, builders);
         }
 
         FlagSuspicions(builders);
@@ -98,27 +88,61 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
         }
     }
 
-    private void HandleRun(Run run, List<AuthorBuilder> builders)
+    private List<Token> TokenizeParagraph(
+        Paragraph paragraph,
+        MainDocumentPart mainPart,
+        List<(Paragraph Paragraph, Hyperlink Hyperlink)> hyperlinksToRemove,
+        HashSet<string> relationshipsToDelete,
+        IReport report)
+    {
+        var tokens = new List<Token>();
+        foreach (var child in paragraph.ChildElements)
+        {
+            switch (child)
+            {
+                case Run run:
+                    AppendRunTokens(run, tokens);
+                    break;
+                case Hyperlink hyperlink:
+                    AppendHyperlinkTokens(hyperlink, paragraph, mainPart, tokens, hyperlinksToRemove, relationshipsToDelete, report);
+                    break;
+            }
+        }
+
+        return tokens;
+    }
+
+    private static void AppendRunTokens(Run run, List<Token> tokens)
     {
         var text = GetRunText(run);
-        if (IsSuperscript(run))
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        // Whitespace-only superscript runs are formatting artifacts (e.g. an
+        // accidentally-typed space in superscript mode). They carry no label
+        // content, but they DO carry visual whitespace that may belong to a
+        // separator (" and ", ", ") that crosses run boundaries — so emit the
+        // whitespace as a Text token and let the consume pass merge it.
+        if (IsSuperscript(run) && !string.IsNullOrWhiteSpace(text))
         {
             foreach (var label in SplitLabels(text))
             {
-                builders[^1].AddLabel(label);
+                tokens.Add(new Token(TokenKind.Label, label));
             }
 
             return;
         }
 
-        ProcessTextRun(text, builders);
+        tokens.Add(new Token(TokenKind.Text, text));
     }
 
-    private void HandleHyperlink(
+    private void AppendHyperlinkTokens(
         Hyperlink hyperlink,
-        MainDocumentPart mainPart,
-        List<AuthorBuilder> builders,
         Paragraph owningParagraph,
+        MainDocumentPart mainPart,
+        List<Token> tokens,
         List<(Paragraph Paragraph, Hyperlink Hyperlink)> hyperlinksToRemove,
         HashSet<string> relationshipsToDelete,
         IReport report)
@@ -136,7 +160,11 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
 
         if (!isOrcidHyperlink)
         {
-            ProcessTextRun(innerText, builders);
+            if (innerText.Length > 0)
+            {
+                tokens.Add(new Token(TokenKind.Text, innerText));
+            }
+
             return;
         }
 
@@ -145,17 +173,26 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
             report.Warn(
                 Name,
                 $"hyperlink target contains '{_options.OrcidUrlMarker}' but no ORCID ID was found: '{url}'");
-            ProcessTextRun(innerText, builders);
+            if (innerText.Length > 0)
+            {
+                tokens.Add(new Token(TokenKind.Text, innerText));
+            }
+
             return;
         }
 
         var orcidId = match.Value;
-        builders[^1].OrcidId ??= orcidId;
         report.Info(Name, $"extracted ORCID '{orcidId}' from hyperlink");
+
+        // Order matters: ORCID first, then visible text. The Orcid token
+        // flushes any buffered text (which may include a trailing separator
+        // like " and " that opens the next author), then attaches the id to
+        // the (now fresh) builder. The Text token afterwards fills the name.
+        tokens.Add(new Token(TokenKind.Orcid, orcidId));
 
         if (!IsBadgeContent(innerText, hasDrawing))
         {
-            ProcessTextRun(innerText, builders);
+            tokens.Add(new Token(TokenKind.Text, innerText));
         }
 
         hyperlinksToRemove.Add((owningParagraph, hyperlink));
@@ -163,6 +200,41 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
         {
             relationshipsToDelete.Add(rId);
         }
+    }
+
+    private void ConsumeTokens(IReadOnlyList<Token> tokens, List<AuthorBuilder> builders)
+    {
+        var buffer = new StringBuilder();
+        foreach (var token in tokens)
+        {
+            switch (token.Kind)
+            {
+                case TokenKind.Text:
+                    buffer.Append(token.Value);
+                    break;
+                case TokenKind.Label:
+                    FlushBuffer(buffer, builders);
+                    builders[^1].AddLabel(token.Value);
+                    break;
+                case TokenKind.Orcid:
+                    FlushBuffer(buffer, builders);
+                    builders[^1].OrcidId ??= token.Value;
+                    break;
+            }
+        }
+
+        FlushBuffer(buffer, builders);
+    }
+
+    private void FlushBuffer(StringBuilder buffer, List<AuthorBuilder> builders)
+    {
+        if (buffer.Length == 0)
+        {
+            return;
+        }
+
+        ProcessTextRun(buffer.ToString(), builders);
+        buffer.Clear();
     }
 
     private bool IsBadgeContent(string innerText, bool hasDrawing)
@@ -413,6 +485,15 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
 
     [GeneratedRegex(@"\p{L}", RegexOptions.CultureInvariant)]
     private static partial Regex AlphabeticRegex();
+
+    private enum TokenKind
+    {
+        Text,
+        Label,
+        Orcid,
+    }
+
+    private readonly record struct Token(TokenKind Kind, string Value);
 
     private sealed class AuthorBuilder
     {

@@ -433,6 +433,83 @@ public sealed class ExtractAuthorsRuleTests
     }
 
     [Fact]
+    public void Apply_WithAndSeparatorFragmentedAcrossThreeRuns_SplitsCorrectly()
+    {
+        // Mirrors artigos 2, 5, 9 da pasta examples/: the " and " separator is
+        // split into 3 runs (" ", "and", " ") because Word inserted proofErr
+        // markers (or a superscript whitespace) between them. Each fragment
+        // arrives in its own ProcessTextRun call in the old design, so the
+        // separator never matched. Tokenize+consume merges adjacent text into
+        // a single buffer before searching for separators.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Author A"),
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            AuthorsParagraphFactory.TextRun(" "),
+            AuthorsParagraphFactory.TextRun("and"),
+            AuthorsParagraphFactory.TextRun(" "),
+            AuthorsParagraphFactory.TextRun("Author B"),
+            AuthorsParagraphFactory.SuperscriptRun("2"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Equal(2, ctx.Authors.Count);
+        Assert.Equal("Author A", ctx.Authors[0].Name);
+        Assert.Equal("Author B", ctx.Authors[1].Name);
+        Assert.DoesNotContain(ctx.Authors, a => a.Name.Contains("and", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_WithCommaSeparatorFragmentedAcrossTwoRuns_SplitsCorrectly()
+    {
+        // Mirrors artigo 7 da pasta examples/: ", " separator is split into
+        // two adjacent runs ("," and " ") which the old per-run matcher missed.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Author A"),
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            AuthorsParagraphFactory.TextRun(","),
+            AuthorsParagraphFactory.TextRun(" "),
+            AuthorsParagraphFactory.TextRun("Author B"),
+            AuthorsParagraphFactory.SuperscriptRun("2"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Equal(2, ctx.Authors.Count);
+        Assert.Equal("Author A", ctx.Authors[0].Name);
+        Assert.Equal("Author B", ctx.Authors[1].Name);
+    }
+
+    [Fact]
+    public void Apply_WithSuperscriptWhitespaceBeforeAndSeparator_SplitsCorrectly()
+    {
+        // Exact shape of artigo 5 (and 10): the space before "and" is
+        // accidentally formatted as superscript. Whitespace-only superscript
+        // runs must not be silently dropped — they need to be preserved as
+        // text so the " and " separator can match.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Gabriel"),
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            AuthorsParagraphFactory.SuperscriptRun(" "),
+            AuthorsParagraphFactory.TextRun("and"),
+            AuthorsParagraphFactory.TextRun(" "),
+            AuthorsParagraphFactory.TextRun("Peggy"),
+            AuthorsParagraphFactory.SuperscriptRun("2"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Equal(2, ctx.Authors.Count);
+        Assert.Equal("Gabriel", ctx.Authors[0].Name);
+        Assert.Equal(new[] { "1" }, ctx.Authors[0].AffiliationLabels);
+        Assert.Equal("Peggy", ctx.Authors[1].Name);
+        Assert.Equal(new[] { "2" }, ctx.Authors[1].AffiliationLabels);
+    }
+
+    [Fact]
     public void Apply_WithAuthorsAcrossTwoParagraphs_StoppedByAffiliationLine_EmitsBothAuthors()
     {
         // Mirrors artigo 1 da pasta examples/: 2 authors split across separate
