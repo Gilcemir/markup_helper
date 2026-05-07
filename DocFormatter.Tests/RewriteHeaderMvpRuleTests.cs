@@ -12,7 +12,7 @@ namespace DocFormatter.Tests;
 
 public sealed class RewriteHeaderMvpRuleTests
 {
-    private static RewriteHeaderMvpRule CreateRule() => new(new FormattingOptions());
+    private static RewriteHeaderMvpRule CreateRule() => new();
 
     private static string ParagraphText(Paragraph p)
         => string.Concat(p.Descendants<Text>().Select(t => t.Text));
@@ -36,6 +36,7 @@ public sealed class RewriteHeaderMvpRuleTests
             ArticleTitle = AuthorsParagraphFactory.TitleText,
         };
         ctx.Authors.Add(new Author("Maria Silva", new[] { "1" }, OrcidId: null));
+        ctx.AuthorParagraphs.Add(AuthorsParagraphFactory.GetAuthorsParagraph(doc));
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);
@@ -69,6 +70,7 @@ public sealed class RewriteHeaderMvpRuleTests
             ArticleTitle = AuthorsParagraphFactory.TitleText,
         };
         ctx.Authors.Add(new Author("Maria Silva", new[] { "1" }, OrcidId: null));
+        ctx.AuthorParagraphs.Add(AuthorsParagraphFactory.GetAuthorsParagraph(doc));
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);
@@ -99,6 +101,7 @@ public sealed class RewriteHeaderMvpRuleTests
         };
         ctx.Authors.Add(new Author("Author A", new[] { "1" }, OrcidId: null));
         ctx.Authors.Add(new Author("Author B", new[] { "2" }, OrcidId: "0000-0002-1825-0097"));
+        ctx.AuthorParagraphs.Add(AuthorsParagraphFactory.GetAuthorsParagraph(doc));
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);
@@ -202,6 +205,7 @@ public sealed class RewriteHeaderMvpRuleTests
             ArticleTitle = "On X",
         };
         ctx.Authors.Add(new Author("Maria Silva", new[] { "1" }, OrcidId: null));
+        ctx.AuthorParagraphs.Add(authors);
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);
@@ -230,6 +234,7 @@ public sealed class RewriteHeaderMvpRuleTests
             ArticleTitle = AuthorsParagraphFactory.TitleText,
         };
         ctx.Authors.Add(new Author("Anonymous Author", Array.Empty<string>(), OrcidId: null));
+        ctx.AuthorParagraphs.Add(AuthorsParagraphFactory.GetAuthorsParagraph(doc));
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);
@@ -255,6 +260,7 @@ public sealed class RewriteHeaderMvpRuleTests
         };
         ctx.Authors.Add(new Author("Maria Silva", new[] { "1" }, OrcidId: null));
         ctx.Authors.Add(new Author(string.Empty, Array.Empty<string>(), OrcidId: null, AuthorConfidence.Low));
+        ctx.AuthorParagraphs.Add(AuthorsParagraphFactory.GetAuthorsParagraph(doc));
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);
@@ -290,7 +296,7 @@ public sealed class RewriteHeaderMvpRuleTests
             new ExtractTopTableRule(new FormattingOptions()),
             new ParseHeaderLinesRule(),
             new ExtractAuthorsRule(new FormattingOptions()),
-            new RewriteHeaderMvpRule(new FormattingOptions()),
+            new RewriteHeaderMvpRule(),
         });
 
         var ctx = new FormattingContext();
@@ -342,7 +348,7 @@ public sealed class RewriteHeaderMvpRuleTests
             new ExtractTopTableRule(new FormattingOptions()),
             new ParseHeaderLinesRule(),
             new ExtractAuthorsRule(new FormattingOptions()),
-            new RewriteHeaderMvpRule(new FormattingOptions()),
+            new RewriteHeaderMvpRule(),
         });
 
         var ctx = new FormattingContext();
@@ -375,6 +381,7 @@ public sealed class RewriteHeaderMvpRuleTests
             ArticleTitle = AuthorsParagraphFactory.TitleText,
         };
         ctx.Authors.Add(new Author("Maria Silva", new[] { "1" }, OrcidId: "0000-0002-1825-0097"));
+        ctx.AuthorParagraphs.Add(AuthorsParagraphFactory.GetAuthorsParagraph(doc));
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);
@@ -416,6 +423,9 @@ public sealed class RewriteHeaderMvpRuleTests
         };
         ctx.Authors.Add(new Author("Author A", new[] { "1" }, OrcidId: null));
         ctx.Authors.Add(new Author("Author B", new[] { "2" }, OrcidId: null));
+        var firstAuthors = (Paragraph)secondAuthors.PreviousSibling()!;
+        ctx.AuthorParagraphs.Add(firstAuthors);
+        ctx.AuthorParagraphs.Add(secondAuthors);
 
         var report = new Report();
         CreateRule().Apply(doc, ctx, report);

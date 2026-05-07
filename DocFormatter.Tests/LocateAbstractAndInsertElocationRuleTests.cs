@@ -379,7 +379,7 @@ public sealed class LocateAbstractAndInsertElocationRuleTests
             new ExtractTopTableRule(new FormattingOptions()),
             new ParseHeaderLinesRule(),
             new ExtractAuthorsRule(new FormattingOptions()),
-            new RewriteHeaderMvpRule(new FormattingOptions()),
+            new RewriteHeaderMvpRule(),
             new LocateAbstractAndInsertElocationRule(new FormattingOptions()),
         });
 

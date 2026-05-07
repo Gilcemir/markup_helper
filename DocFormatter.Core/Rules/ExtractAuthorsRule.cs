@@ -44,6 +44,11 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
             return;
         }
 
+        // Share the detected paragraphs with downstream rules. The body is
+        // about to be mutated (hyperlinks removed) which would change what the
+        // locator returns on a second call.
+        ctx.AuthorParagraphs.AddRange(paragraphs);
+
         var builders = new List<AuthorBuilder> { new() };
         var hyperlinksToRemove = new List<(Paragraph Paragraph, Hyperlink Hyperlink)>();
         var relationshipsToDelete = new HashSet<string>(StringComparer.Ordinal);

@@ -1,5 +1,4 @@
 using DocFormatter.Core.Models;
-using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -20,14 +19,6 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
 
     public const string MissingAuthorsParagraphMessage =
         "authors paragraph not found; cannot rewrite header";
-
-    private readonly FormattingOptions _options;
-
-    public RewriteHeaderMvpRule(FormattingOptions options)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        _options = options;
-    }
 
     public string Name => nameof(RewriteHeaderMvpRule);
 
@@ -57,7 +48,11 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
         }
         else
         {
-            var authorParagraphs = HeaderParagraphLocator.FindAuthorsParagraphs(body, _options.AbstractMarkers);
+            // Use the paragraphs ExtractAuthorsRule already located. Re-running
+            // the locator here would see a body whose ORCID hyperlinks have
+            // been stripped — and a stripped author paragraph that ends in
+            // sup("1,2*") would be misclassified as an affiliation boundary.
+            var authorParagraphs = ctx.AuthorParagraphs;
             if (authorParagraphs.Count == 0)
             {
                 throw new InvalidOperationException(MissingAuthorsParagraphMessage);
