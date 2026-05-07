@@ -278,6 +278,7 @@ public sealed class RewriteHeaderMvpRuleTests
         var paragraphs = AuthorsParagraphFactory.GetBody(doc).Elements<Paragraph>().ToList();
         Assert.Equal("Maria Silva1", ParagraphText(paragraphs[4]));
         Assert.Equal(5, paragraphs.Count);
+        Assert.Same(paragraphs[0], ctx.DoiParagraph);
         Assert.Same(paragraphs[4], ctx.AuthorBlockEndParagraph);
     }
 

@@ -116,6 +116,7 @@ public sealed class ExtractCorrespondingAuthorRule : IFormattingRule
     {
         var authorIndex = 0;
         var matchCount = 0;
+        var warnedSecondMarker = false;
 
         foreach (var paragraph in ctx.AuthorParagraphs)
         {
@@ -131,7 +132,7 @@ public sealed class ExtractCorrespondingAuthorRule : IFormattingRule
                 {
                     if (text.Contains('*'))
                     {
-                        OnStarFound(ctx, report, authorIndex, ref matchCount);
+                        OnStarFound(ctx, report, authorIndex, ref matchCount, ref warnedSecondMarker);
                     }
 
                     continue;
@@ -150,7 +151,7 @@ public sealed class ExtractCorrespondingAuthorRule : IFormattingRule
 
                     if (text[i] == '*')
                     {
-                        OnStarFound(ctx, report, authorIndex, ref matchCount);
+                        OnStarFound(ctx, report, authorIndex, ref matchCount, ref warnedSecondMarker);
                     }
 
                     i++;
@@ -159,7 +160,7 @@ public sealed class ExtractCorrespondingAuthorRule : IFormattingRule
         }
     }
 
-    private void OnStarFound(FormattingContext ctx, IReport report, int authorIndex, ref int matchCount)
+    private void OnStarFound(FormattingContext ctx, IReport report, int authorIndex, ref int matchCount, ref bool warnedSecondMarker)
     {
         matchCount++;
         if (matchCount == 1)
@@ -172,7 +173,13 @@ public sealed class ExtractCorrespondingAuthorRule : IFormattingRule
             return;
         }
 
+        if (warnedSecondMarker)
+        {
+            return;
+        }
+
         report.Warn(Name, SecondMarkerMessage);
+        warnedSecondMarker = true;
     }
 
     private void PromoteOrcidIfApplicable(FormattingContext ctx, IReport report)

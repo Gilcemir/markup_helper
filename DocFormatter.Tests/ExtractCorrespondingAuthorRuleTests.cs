@@ -187,6 +187,8 @@ public sealed class ExtractCorrespondingAuthorRuleTests
         CreateRule().Apply(doc, ctx, report);
 
         Assert.Equal(0, ctx.CorrespondingAuthorIndex);
+        Assert.Equal("alice@x.edu", ctx.CorrespondingEmail);
+        Assert.Equal("1 Place", PlainText(affiliation));
 
         var warn = Assert.Single(report.Entries, e => e.Level == ReportLevel.Warn);
         Assert.Equal(nameof(ExtractCorrespondingAuthorRule), warn.Rule);
@@ -240,6 +242,7 @@ public sealed class ExtractCorrespondingAuthorRuleTests
 
         Assert.Null(ctx.CorrespondingEmail);
         Assert.Equal("2 Universidade Y", PlainText(affiliation));
+        Assert.Equal(0, ctx.CorrespondingAuthorIndex);
 
         var warn = Assert.Single(report.Entries, e => e.Level == ReportLevel.Warn);
         Assert.Equal(nameof(ExtractCorrespondingAuthorRule), warn.Rule);
@@ -377,6 +380,7 @@ public sealed class ExtractCorrespondingAuthorRuleTests
         Assert.Equal(bodyXmlBefore, doc.MainDocumentPart!.Document!.Body!.OuterXml);
 
         var info = Assert.Single(report.Entries, e => e.Level == ReportLevel.Info);
+        Assert.Equal(nameof(ExtractCorrespondingAuthorRule), info.Rule);
         Assert.Equal(ExtractCorrespondingAuthorRule.NoMarkerMessage, info.Message);
     }
 

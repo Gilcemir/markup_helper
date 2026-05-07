@@ -204,6 +204,30 @@ public sealed class ApplyHeaderAlignmentRuleTests
     }
 
     [Fact]
+    public void Apply_WithDoiPreSetToWrongAlignment_OverwritesToRight()
+    {
+        var doiPara = PlainParagraph("DOI 10.1234/abc");
+        doiPara.ParagraphProperties = new ParagraphProperties(
+            new Justification { Val = JustificationValues.Left });
+        var sectionPara = PlainParagraph("Original Article");
+        var titlePara = PlainParagraph("Title");
+
+        using var doc = CreateDocumentWith(doiPara, sectionPara, titlePara);
+
+        var ctx = new FormattingContext
+        {
+            DoiParagraph = doiPara,
+            SectionParagraph = sectionPara,
+            TitleParagraph = titlePara,
+        };
+
+        CreateRule().Apply(doc, ctx, new Report());
+
+        Assert.Equal(JustificationValues.Right, JustificationOf(doiPara));
+        Assert.Equal(1, JustificationCount(doiPara));
+    }
+
+    [Fact]
     public void Apply_WithExistingParagraphPropertiesButNoJustification_PreservesOtherProperties()
     {
         var titlePara = PlainParagraph("Title");

@@ -43,8 +43,7 @@ public sealed class ApplyHeaderAlignmentRule : IFormattingRule
         }
 
         var properties = paragraph.ParagraphProperties ??= new ParagraphProperties();
-        properties.GetFirstChild<Justification>()?.Remove();
-        properties.AppendChild(new Justification { Val = value });
+        properties.Justification = new Justification { Val = value };
         return true;
     }
 

@@ -45,6 +45,6 @@ public sealed partial class FormattingOptions
     [GeneratedRegex(@"\* *E-?mail *:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BuildCorrespondingMarkerRegex();
 
-    [GeneratedRegex(@"^\s*c[oa]rr?es?p[a-z]*\s+au[a-z]*\b\s*[:\-—]?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*c[oa]rr?es?p[a-z]*\s+au[a-z]*\b\s*[:\-–—]?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BuildCorrespondingAuthorLabelRegex();
 }
