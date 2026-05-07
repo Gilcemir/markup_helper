@@ -53,7 +53,9 @@ public sealed class LocateAbstractAndInsertElocationRule : IFormattingRule
         }
 
         var elocationParagraph = new Paragraph(
-            new Run(new Text(ctx.ElocationId) { Space = SpaceProcessingModeValues.Preserve }));
+            new Run(
+                RewriteHeaderMvpRule.CreateBaseRunProperties(),
+                new Text(ctx.ElocationId) { Space = SpaceProcessingModeValues.Preserve }));
         body.InsertBefore(elocationParagraph, match);
 
         report.Info(Name, $"ELOCATION '{ctx.ElocationId}' inserted above Abstract paragraph");

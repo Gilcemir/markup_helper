@@ -93,10 +93,27 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
             + $"(skipped {ctx.Authors.Count - renderableAuthors.Count} empty-name record(s))");
     }
 
+    private const string DefaultFont = "Times New Roman";
+    private const string DefaultFontSizeHalfPoints = "24";
+
+    internal static RunProperties CreateBaseRunProperties()
+        => new(
+            new RunFonts
+            {
+                Ascii = DefaultFont,
+                HighAnsi = DefaultFont,
+                ComplexScript = DefaultFont,
+                EastAsia = DefaultFont,
+            },
+            new FontSize { Val = DefaultFontSizeHalfPoints },
+            new FontSizeComplexScript { Val = DefaultFontSizeHalfPoints });
+
     private static Paragraph BuildPlainParagraph(string text)
     {
         return new Paragraph(
-            new Run(new Text(text) { Space = SpaceProcessingModeValues.Preserve }));
+            new Run(
+                CreateBaseRunProperties(),
+                new Text(text) { Space = SpaceProcessingModeValues.Preserve }));
     }
 
     private static Paragraph BuildAuthorParagraph(Author author)
@@ -104,7 +121,9 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
         var paragraph = new Paragraph();
 
         paragraph.AppendChild(
-            new Run(new Text(author.Name) { Space = SpaceProcessingModeValues.Preserve }));
+            new Run(
+                CreateBaseRunProperties(),
+                new Text(author.Name) { Space = SpaceProcessingModeValues.Preserve }));
 
         if (author.AffiliationLabels.Count > 0)
         {
@@ -115,7 +134,9 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
         if (!string.IsNullOrEmpty(author.OrcidId))
         {
             paragraph.AppendChild(
-                new Run(new Text(" " + author.OrcidId) { Space = SpaceProcessingModeValues.Preserve }));
+                new Run(
+                    CreateBaseRunProperties(),
+                    new Text(" " + author.OrcidId) { Space = SpaceProcessingModeValues.Preserve }));
         }
 
         return paragraph;
@@ -123,8 +144,8 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
 
     private static Run BuildSuperscriptRun(string text)
     {
-        var properties = new RunProperties(
-            new VerticalTextAlignment { Val = VerticalPositionValues.Superscript });
+        var properties = CreateBaseRunProperties();
+        properties.AppendChild(new VerticalTextAlignment { Val = VerticalPositionValues.Superscript });
         return new Run(properties, new Text(text) { Space = SpaceProcessingModeValues.Preserve });
     }
 }

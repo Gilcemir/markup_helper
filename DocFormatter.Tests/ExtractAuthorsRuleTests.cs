@@ -431,4 +431,30 @@ public sealed class ExtractAuthorsRuleTests
         Assert.Empty(AuthorsParagraphFactory.GetBody(doc).Elements<Table>());
         Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
     }
+
+    [Fact]
+    public void Apply_WithLocalPathHyperlinkContainingOrcidId_ExtractsIdAndDropsHyperlink()
+    {
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph();
+        var mainPart = GetMainPart(doc);
+        var rel = mainPart.AddHyperlinkRelationship(
+            new Uri("file:///Users/educbank/Documents/personal_workspace/markup_helper/examples/0000-0002-8233-7883"),
+            true);
+        var authors = AuthorsParagraphFactory.GetAuthorsParagraph(doc);
+        authors.AppendChild(AuthorsParagraphFactory.TextRun("Maria Silva"));
+        authors.AppendChild(AuthorsParagraphFactory.SuperscriptRun("1"));
+        authors.AppendChild(AuthorsParagraphFactory.Hyperlink(
+            rel.Id, AuthorsParagraphFactory.TextRun("ORCID")));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Maria Silva", author.Name);
+        Assert.Equal(new[] { "1" }, author.AffiliationLabels);
+        Assert.Equal("0000-0002-8233-7883", author.OrcidId);
+        Assert.Empty(authors.Elements<Hyperlink>());
+        Assert.Empty(mainPart.HyperlinkRelationships);
+    }
 }

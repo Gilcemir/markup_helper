@@ -360,4 +360,33 @@ public sealed class LocateAbstractAndInsertElocationRuleTests
         Assert.Equal(bodyContentXmlBefore, bodyContent.OuterXml);
         Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
     }
+
+    [Fact]
+    public void Apply_ElocationRunIsFormattedAsTimesNewRoman12pt()
+    {
+        var section = PlainParagraph("Original Article");
+        var title = PlainParagraph("On the Behavior of Title");
+        var abstractPara = BoldAbstractParagraph("Abstract", " — body");
+
+        using var doc = CreateDocumentWith(section, title, abstractPara);
+
+        var ctx = new FormattingContext { ElocationId = "e2024001" };
+        var report = new Report();
+
+        CreateRule().Apply(doc, ctx, report);
+
+        var elocationParagraph = GetBody(doc).Elements<Paragraph>()
+            .First(p => ParagraphText(p) == "e2024001");
+        var run = elocationParagraph.Elements<Run>().Single();
+
+        var props = run.RunProperties;
+        Assert.NotNull(props);
+        var fonts = props!.GetFirstChild<RunFonts>();
+        Assert.NotNull(fonts);
+        Assert.Equal("Times New Roman", fonts!.Ascii?.Value);
+        Assert.Equal("Times New Roman", fonts.HighAnsi?.Value);
+        var size = props.GetFirstChild<FontSize>();
+        Assert.NotNull(size);
+        Assert.Equal("24", size!.Val?.Value);
+    }
 }

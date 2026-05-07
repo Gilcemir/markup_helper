@@ -361,4 +361,49 @@ public sealed class RewriteHeaderMvpRuleTests
         Assert.Empty(mainPart.HyperlinkRelationships);
         Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
     }
+
+    [Fact]
+    public void Apply_RuntimeRunsAreFormattedAsTimesNewRoman12pt()
+    {
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Maria Silva"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext
+        {
+            Doi = "10.1234/abc",
+            ArticleTitle = AuthorsParagraphFactory.TitleText,
+        };
+        ctx.Authors.Add(new Author("Maria Silva", new[] { "1" }, OrcidId: "0000-0002-1825-0097"));
+
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var paragraphs = AuthorsParagraphFactory.GetBody(doc).Elements<Paragraph>().ToList();
+
+        var doiRun = paragraphs[0].Elements<Run>().Single();
+        AssertTimesNewRoman12(doiRun);
+
+        var authorRuns = paragraphs[4].Elements<Run>().ToList();
+        Assert.Equal(3, authorRuns.Count);
+        AssertTimesNewRoman12(authorRuns[0]); // name
+        AssertTimesNewRoman12(authorRuns[1]); // superscript label
+        Assert.True(IsSuperscript(authorRuns[1]));
+        AssertTimesNewRoman12(authorRuns[2]); // ORCID id
+
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
+    }
+
+    private static void AssertTimesNewRoman12(Run run)
+    {
+        var props = run.RunProperties;
+        Assert.NotNull(props);
+        var fonts = props!.GetFirstChild<RunFonts>();
+        Assert.NotNull(fonts);
+        Assert.Equal("Times New Roman", fonts!.Ascii?.Value);
+        Assert.Equal("Times New Roman", fonts.HighAnsi?.Value);
+        var size = props.GetFirstChild<FontSize>();
+        Assert.NotNull(size);
+        Assert.Equal("24", size!.Val?.Value);
+    }
 }

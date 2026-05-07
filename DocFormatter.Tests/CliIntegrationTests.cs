@@ -209,6 +209,34 @@ public sealed class CliIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void Run_Batch_SkipsWordLockAndAppleResourceForkArtifacts()
+    {
+        var folder = Path.Combine(_tempDir, "inbox-with-junk");
+        Directory.CreateDirectory(folder);
+
+        var ok = Path.Combine(folder, "real.docx");
+        DocxFixtureBuilder.WriteValidDocx(ok);
+
+        // Word writes ~$<name>.docx lock files when a doc is open; macOS
+        // sometimes drops ._<name>.docx resource forks. Both are not valid
+        // OpenXML packages and must be ignored, not aborted on.
+        File.WriteAllBytes(Path.Combine(folder, "~$real.docx"), new byte[] { 0x00 });
+        File.WriteAllBytes(Path.Combine(folder, "._real.docx"), new byte[] { 0x00 });
+
+        var exit = CliApp.Run(new[] { folder }, new StringWriter(), new StringWriter());
+
+        Assert.Equal(0, exit);
+        var formattedDir = Path.Combine(folder, "formatted");
+        Assert.True(File.Exists(Path.Combine(formattedDir, "real.docx")));
+        Assert.False(File.Exists(Path.Combine(formattedDir, "~$real.docx")));
+        Assert.False(File.Exists(Path.Combine(formattedDir, "._real.docx")));
+
+        var summary = File.ReadAllLines(Path.Combine(formattedDir, "_batch_summary.txt"));
+        Assert.Single(summary);
+        Assert.StartsWith("real.docx ✓", summary[0]);
+    }
+
+    [Fact]
     public void Run_SingleFile_WritesAppLogUnderFormattedDirectory()
     {
         var sourcePath = Path.Combine(_tempDir, "with-log.docx");

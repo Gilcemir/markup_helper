@@ -123,6 +123,7 @@ internal static class CliApp
         var processor = new FileProcessor(services, logger);
 
         var inputs = Directory.EnumerateFiles(folderPath, "*.docx", SearchOption.TopDirectoryOnly)
+            .Where(p => !IsTransientArtifact(Path.GetFileName(p)))
             .Where(p => !string.Equals(
                 Path.GetFullPath(Path.GetDirectoryName(p) ?? string.Empty),
                 formattedDir,
@@ -165,6 +166,10 @@ internal static class CliApp
 
         return ExitSuccess;
     }
+
+    internal static bool IsTransientArtifact(string fileName)
+        => fileName.StartsWith("~$", StringComparison.Ordinal)
+        || fileName.StartsWith("._", StringComparison.Ordinal);
 
     private static void WriteBatchSummary(string path, IReadOnlyList<ProcessOutcome> outcomes)
     {

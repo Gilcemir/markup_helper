@@ -111,16 +111,18 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
         var innerText = GetHyperlinkText(hyperlink);
         var hasDrawing = hyperlink.Descendants<Drawing>().Any();
 
-        var isOrcidUrl = !string.IsNullOrEmpty(url)
-            && url.Contains(_options.OrcidUrlMarker, StringComparison.OrdinalIgnoreCase);
+        var hasUrl = !string.IsNullOrEmpty(url);
+        var match = hasUrl ? _options.OrcidIdRegex.Match(url!) : Match.Empty;
+        var hasOrcidMarker = hasUrl
+            && url!.Contains(_options.OrcidUrlMarker, StringComparison.OrdinalIgnoreCase);
+        var isOrcidHyperlink = match.Success || hasOrcidMarker;
 
-        if (!isOrcidUrl)
+        if (!isOrcidHyperlink)
         {
             ProcessTextRun(innerText, builders);
             return;
         }
 
-        var match = _options.OrcidIdRegex.Match(url!);
         if (!match.Success)
         {
             report.Warn(
