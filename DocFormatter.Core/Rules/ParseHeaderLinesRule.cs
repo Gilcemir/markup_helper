@@ -1,3 +1,4 @@
+using System.Text;
 using DocFormatter.Core.Pipeline;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -30,20 +31,27 @@ public sealed class ParseHeaderLinesRule : IFormattingRule
 
         foreach (var paragraph in body.Elements<Paragraph>())
         {
-            var text = GetParagraphPlainText(paragraph);
-            if (string.IsNullOrWhiteSpace(text))
+            foreach (var line in GetParagraphLogicalLines(paragraph))
             {
-                continue;
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                if (section is null)
+                {
+                    section = line;
+                    continue;
+                }
+
+                title = line;
+                break;
             }
 
-            if (section is null)
+            if (title is not null)
             {
-                section = text;
-                continue;
+                break;
             }
-
-            title = text;
-            break;
         }
 
         if (section is null)
@@ -60,6 +68,26 @@ public sealed class ParseHeaderLinesRule : IFormattingRule
         report.Info(Name, $"section='{section}', articleTitle='{title}'");
     }
 
-    private static string GetParagraphPlainText(Paragraph paragraph)
-        => string.Concat(paragraph.Descendants<Text>().Select(t => t.Text));
+    private static IEnumerable<string> GetParagraphLogicalLines(Paragraph paragraph)
+    {
+        var sb = new StringBuilder();
+        foreach (var node in paragraph.Descendants())
+        {
+            switch (node)
+            {
+                case Text t:
+                    sb.Append(t.Text);
+                    break;
+                case Break:
+                    yield return sb.ToString();
+                    sb.Clear();
+                    break;
+                case TabChar:
+                    sb.Append('\t');
+                    break;
+            }
+        }
+
+        yield return sb.ToString();
+    }
 }

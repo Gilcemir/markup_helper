@@ -171,6 +171,32 @@ public sealed class ParseHeaderLinesRuleTests
     }
 
     [Fact]
+    public void Apply_WhenSectionAndTitleShareParagraphSeparatedByBreak_AssignsBoth()
+    {
+        // Mirrors artigo 4 da pasta examples/: P[0] is "<rB|'ARTICLE'> <r[BR]|''> <rB|'Protein selection gain...'>".
+        // Without splitting on <w:br/>, GetParagraphPlainText concatenated both into "ARTICLEProtein selection gain..."
+        // and then took P[1] (authors) as the title, desalinhando todo o resto.
+        var firstParagraph = new Paragraph(
+            new Run(new Text("ARTICLE") { Space = SpaceProcessingModeValues.Preserve }),
+            new Run(new Break()),
+            new Run(new Text("Protein selection gain") { Space = SpaceProcessingModeValues.Preserve }));
+        var authors = BuildParagraph("Maria Silva, Joana Souza");
+        using var doc = CreateDocumentWith(firstParagraph, authors);
+        var rule = new ParseHeaderLinesRule();
+        var ctx = new FormattingContext();
+        var report = new Report();
+
+        rule.Apply(doc, ctx, report);
+
+        Assert.Equal("Protein selection gain", ctx.ArticleTitle);
+        Assert.Contains(
+            report.Entries,
+            e => e.Level == ReportLevel.Info
+                && e.Message.Contains("section='ARTICLE'", StringComparison.Ordinal)
+                && e.Message.Contains("articleTitle='Protein selection gain'", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Pipeline_WithExtractTopTableThenParseHeaderLines_PopulatesDoiElocationAndArticleTitle()
     {
         var table = BuildThreeByOneTable(
