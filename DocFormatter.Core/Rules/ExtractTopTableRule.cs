@@ -41,7 +41,7 @@ public sealed class ExtractTopTableRule : IFormattingRule
         }
 
         var cells = table.Elements<TableRow>().First().Elements<TableCell>().ToList();
-        var cellTexts = cells.Select(GetCellPlainText).ToList();
+        var cellTexts = cells.Select(GetCellPlainText).Select(t => t.Trim()).ToList();
 
         string idValue;
         string elocationValue;

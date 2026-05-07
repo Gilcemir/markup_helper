@@ -345,6 +345,30 @@ public sealed class ExtractTopTableRuleTests
     }
 
     [Fact]
+    public void Apply_WithNonBreakingSpaceSuffixOnElocationCell_TrimsAndStillMatches()
+    {
+        // Some Word source documents leave a NBSP (U+00A0) glued to the
+        // ELOCATION value. Without trimming, the ^[eE]\d+$ regex misses and
+        // ELOCATION falls through to empty.
+        var table = BuildThreeByOneTable(
+            BuildCell("ART01"),
+            BuildCell("e51362627 "),
+            BuildCell("10.1234/abc"));
+        using var doc = CreateDocumentWith(table);
+        var rule = new ExtractTopTableRule(new FormattingOptions());
+        var ctx = new FormattingContext();
+        var report = new Report();
+
+        rule.Apply(doc, ctx, report);
+
+        Assert.Equal("e51362627", ctx.ElocationId);
+        Assert.DoesNotContain(
+            report.Entries,
+            e => e.Level == ReportLevel.Warn
+                && e.Message.Contains("ELOCATION-shaped value", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Pipeline_WithExtractTopTableRule_OnValidInput_ExtractsContextAndDeletesTable()
     {
         var table = BuildThreeByOneTable(
