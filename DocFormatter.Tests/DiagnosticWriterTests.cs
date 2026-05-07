@@ -2,6 +2,7 @@ using System.Text.Json;
 using DocFormatter.Core.Models;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Reporting;
+using DocFormatter.Core.Rules;
 using Xunit;
 
 namespace DocFormatter.Tests;
@@ -262,6 +263,282 @@ public sealed class DiagnosticWriterTests : IDisposable
         Assert.Contains("\"confidence\": \"missing\"", json);
         Assert.DoesNotContain("\"High\"", json);
         Assert.DoesNotContain("\"Missing\"", json);
+    }
+
+    [Fact]
+    public void Build_NoPhase2RuleWarnsOrErrors_FormattingIsNull_LegacyKeysUnchanged()
+    {
+        var path = Path.Combine(_tempDir, "phase2-silent.diagnostic.json");
+        var report = new Report();
+        report.Warn("ParseAuthors", "legacy warn — none of the four phase 2 rules");
+        report.Info(nameof(ApplyHeaderAlignmentRule), "alignment applied (doi=true, section=true, title=true)");
+        report.Info(nameof(ExtractCorrespondingAuthorRule), ExtractCorrespondingAuthorRule.NoMarkerMessage);
+        var ctx = new FormattingContext { Doi = "10.1/x", ElocationId = "e1", ArticleTitle = "T" };
+
+        DiagnosticWriter.Write(path, "phase2-silent.docx", ctx, report);
+
+        var doc = ReadDocument(path);
+        Assert.Null(doc.Formatting);
+
+        var raw = File.ReadAllText(path);
+        Assert.Contains("\"formatting\": null", raw);
+        Assert.Contains("\"file\":", raw);
+        Assert.Contains("\"status\":", raw);
+        Assert.Contains("\"extractedAt\":", raw);
+        Assert.Contains("\"fields\":", raw);
+        Assert.Contains("\"issues\":", raw);
+    }
+
+    [Fact]
+    public void Build_AlignmentWarnsOnTitleOnly_AlignmentPopulated_OtherSubObjectsNull()
+    {
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        report.Info(nameof(ApplyHeaderAlignmentRule), "alignment applied (doi=true, section=true, title=false)");
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("title-warn.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.NotNull(doc.Formatting!.AlignmentApplied);
+        Assert.True(doc.Formatting.AlignmentApplied!.Doi);
+        Assert.True(doc.Formatting.AlignmentApplied.Section);
+        Assert.False(doc.Formatting.AlignmentApplied.Title);
+        Assert.Null(doc.Formatting.AbstractFormatted);
+        Assert.Null(doc.Formatting.AuthorBlockSpacingApplied);
+        Assert.Null(doc.Formatting.CorrespondingEmail);
+    }
+
+    [Fact]
+    public void Build_AlignmentWarnsOnAllThree_AllAlignmentBoolsFalse()
+    {
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingDoiParagraphMessage);
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingSectionParagraphMessage);
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("triple-warn.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        var alignment = doc.Formatting!.AlignmentApplied;
+        Assert.NotNull(alignment);
+        Assert.False(alignment!.Doi);
+        Assert.False(alignment.Section);
+        Assert.False(alignment.Title);
+    }
+
+    [Fact]
+    public void Build_CorrespondingEmailExtractionFailed_ValueNull_ReasonPopulated()
+    {
+        var report = new Report();
+        report.Warn(
+            nameof(ExtractCorrespondingAuthorRule),
+            ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("email-failed.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.NotNull(doc.Formatting!.CorrespondingEmail);
+        Assert.Null(doc.Formatting.CorrespondingEmail!.Value);
+        Assert.Equal(
+            ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage,
+            doc.Formatting.CorrespondingEmail.Reason);
+        Assert.Null(doc.Formatting.AlignmentApplied);
+        Assert.Null(doc.Formatting.AbstractFormatted);
+        Assert.Null(doc.Formatting.AuthorBlockSpacingApplied);
+    }
+
+    [Fact]
+    public void Build_AbstractStructuralItalicBranch_HeadingRewrittenAndDeitalicized()
+    {
+        var report = new Report();
+        report.Warn(nameof(RewriteAbstractRule), RewriteAbstractRule.MissingSeparatorMessage);
+        report.Info(nameof(RewriteAbstractRule), RewriteAbstractRule.StructuralItalicRemovedMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("structural.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        var abs = doc.Formatting!.AbstractFormatted;
+        Assert.NotNull(abs);
+        Assert.True(abs!.HeadingRewritten);
+        Assert.True(abs.BodyDeitalicized);
+        Assert.False(abs.InternalItalicPreserved);
+    }
+
+    [Fact]
+    public void Build_AbstractMixedItalicBranch_HeadingRewrittenButItalicPreserved()
+    {
+        var report = new Report();
+        report.Warn(nameof(RewriteAbstractRule), RewriteAbstractRule.MissingSeparatorMessage);
+        report.Info(nameof(RewriteAbstractRule), RewriteAbstractRule.CanonicalLineInsertedMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("mixed.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        var abs = doc.Formatting!.AbstractFormatted;
+        Assert.NotNull(abs);
+        Assert.True(abs!.HeadingRewritten);
+        Assert.False(abs.BodyDeitalicized);
+        Assert.True(abs.InternalItalicPreserved);
+    }
+
+    [Fact]
+    public void Build_AbstractNotFound_AllAbstractFlagsFalse()
+    {
+        var report = new Report();
+        report.Warn(nameof(RewriteAbstractRule), RewriteAbstractRule.AbstractNotFoundMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("no-abstract.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        var abs = doc.Formatting!.AbstractFormatted;
+        Assert.NotNull(abs);
+        Assert.False(abs!.HeadingRewritten);
+        Assert.False(abs.BodyDeitalicized);
+        Assert.False(abs.InternalItalicPreserved);
+    }
+
+    [Fact]
+    public void Build_SpacingMissingAnchorWarn_AuthorBlockSpacingFalse()
+    {
+        var report = new Report();
+        report.Warn(
+            nameof(EnsureAuthorBlockSpacingRule),
+            EnsureAuthorBlockSpacingRule.MissingAuthorBlockEndMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("spacing-missing.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.False(doc.Formatting!.AuthorBlockSpacingApplied);
+    }
+
+    [Fact]
+    public void Build_SpacingBlankAlreadyPresentInfo_AndOtherRuleWarns_AuthorBlockSpacingTrue()
+    {
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        report.Info(
+            nameof(EnsureAuthorBlockSpacingRule),
+            EnsureAuthorBlockSpacingRule.BlankLineAlreadyPresentMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("spacing-info.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.True(doc.Formatting!.AuthorBlockSpacingApplied);
+    }
+
+    [Fact]
+    public void Build_MultipleRulesContribute_AllSubObjectsPopulatedOnlyForRulesThatWarned()
+    {
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingDoiParagraphMessage);
+        report.Warn(
+            nameof(EnsureAuthorBlockSpacingRule),
+            EnsureAuthorBlockSpacingRule.MissingAffiliationMessage);
+        report.Warn(
+            nameof(ExtractCorrespondingAuthorRule),
+            ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage);
+        report.Info(nameof(RewriteAbstractRule), RewriteAbstractRule.CanonicalLineInsertedMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("combo.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.NotNull(doc.Formatting!.AlignmentApplied);
+        Assert.False(doc.Formatting.AlignmentApplied!.Doi);
+        Assert.True(doc.Formatting.AlignmentApplied.Section);
+        Assert.True(doc.Formatting.AlignmentApplied.Title);
+        Assert.False(doc.Formatting.AuthorBlockSpacingApplied);
+        Assert.NotNull(doc.Formatting.CorrespondingEmail);
+        Assert.Null(doc.Formatting.CorrespondingEmail!.Value);
+        Assert.Null(doc.Formatting.AbstractFormatted);
+    }
+
+    [Fact]
+    public void DiagnosticDocument_Equals_TreatsFormattingNullAndNullAsEqual()
+    {
+        var report = new Report();
+        report.Warn("Other", "trigger");
+        var ctx = new FormattingContext();
+
+        var a = DiagnosticWriter.Build("eq.docx", ctx, report, new DateTime(2026, 5, 7, 10, 0, 0, DateTimeKind.Utc));
+        var b = DiagnosticWriter.Build("eq.docx", ctx, report, new DateTime(2026, 5, 7, 10, 0, 0, DateTimeKind.Utc));
+
+        Assert.Null(a.Formatting);
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void DiagnosticDocument_Equals_ReturnsFalseWhenOnlyFormattingDiffers()
+    {
+        var fixedTime = new DateTime(2026, 5, 7, 10, 0, 0, DateTimeKind.Utc);
+
+        var greenReport = new Report();
+        greenReport.Warn("Other", "trigger");
+        var ctx = new FormattingContext();
+        var withoutFormatting = DiagnosticWriter.Build("eq.docx", ctx, greenReport, fixedTime);
+
+        var warnReport = new Report();
+        warnReport.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        warnReport.Warn("Other", "trigger");
+        var withFormatting = DiagnosticWriter.Build("eq.docx", ctx, warnReport, fixedTime);
+
+        Assert.Null(withoutFormatting.Formatting);
+        Assert.NotNull(withFormatting.Formatting);
+        Assert.NotEqual(withoutFormatting, withFormatting);
+    }
+
+    [Fact]
+    public void Build_FormattingSerializesAsCamelCaseSubObjects()
+    {
+        var path = Path.Combine(_tempDir, "camel.diagnostic.json");
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        report.Warn(
+            nameof(EnsureAuthorBlockSpacingRule),
+            EnsureAuthorBlockSpacingRule.MissingAuthorBlockEndMessage);
+        var ctx = new FormattingContext();
+
+        DiagnosticWriter.Write(path, "camel.docx", ctx, report);
+
+        var raw = File.ReadAllText(path);
+        Assert.Contains("\"formatting\":", raw);
+        Assert.Contains("\"alignmentApplied\":", raw);
+        Assert.Contains("\"authorBlockSpacingApplied\":", raw);
+        Assert.Contains("\"abstractFormatted\":", raw);
+        Assert.Contains("\"correspondingEmail\":", raw);
+        Assert.DoesNotContain("\"AlignmentApplied\":", raw);
+    }
+
+    [Fact]
+    public void Write_RoundTrip_WithFormatting_ProducesEqualDocument()
+    {
+        var path = Path.Combine(_tempDir, "round-trip-formatting.diagnostic.json");
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        report.Warn(
+            nameof(ExtractCorrespondingAuthorRule),
+            ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage);
+        report.Info(
+            nameof(EnsureAuthorBlockSpacingRule),
+            EnsureAuthorBlockSpacingRule.BlankLineInsertedMessage);
+        var ctx = new FormattingContext { Doi = "10.1/x", ElocationId = "e1", ArticleTitle = "T" };
+
+        var fixedTime = new DateTime(2026, 5, 7, 12, 30, 45, DateTimeKind.Utc);
+        var built = DiagnosticWriter.Build("round-trip-formatting.docx", ctx, report, fixedTime);
+        DiagnosticWriter.Write(path, "round-trip-formatting.docx", ctx, report, fixedTime);
+
+        var roundtripped = ReadDocument(path);
+        Assert.Equal(built, roundtripped);
+        Assert.NotNull(roundtripped.Formatting);
     }
 
     private static DiagnosticDocument ReadDocument(string path)

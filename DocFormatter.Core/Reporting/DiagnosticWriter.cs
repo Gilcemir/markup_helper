@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DocFormatter.Core.Models;
 using DocFormatter.Core.Pipeline;
+using DocFormatter.Core.Rules;
 
 namespace DocFormatter.Core.Reporting;
 
@@ -57,6 +58,7 @@ public static class DiagnosticWriter
             Status: MapStatus(report.HighestLevel),
             ExtractedAt: TruncateToSeconds(extractedAt),
             Fields: BuildFields(ctx),
+            Formatting: BuildFormatting(report),
             Issues: BuildIssues(report));
     }
 
@@ -85,6 +87,152 @@ public static class DiagnosticWriter
             AffiliationLabels: author.AffiliationLabels.ToArray(),
             Orcid: author.OrcidId,
             Confidence: MapConfidence(author.Confidence));
+    }
+
+    private static DiagnosticFormatting? BuildFormatting(IReport report)
+    {
+        var alignment = FilterByRule(report, nameof(ApplyHeaderAlignmentRule));
+        var spacing = FilterByRule(report, nameof(EnsureAuthorBlockSpacingRule));
+        var email = FilterByRule(report, nameof(ExtractCorrespondingAuthorRule));
+        var abs = FilterByRule(report, nameof(RewriteAbstractRule));
+
+        if (!HasWarnOrError(alignment)
+            && !HasWarnOrError(spacing)
+            && !HasWarnOrError(email)
+            && !HasWarnOrError(abs))
+        {
+            return null;
+        }
+
+        return new DiagnosticFormatting(
+            AlignmentApplied: BuildAlignment(alignment),
+            AbstractFormatted: BuildAbstract(abs),
+            AuthorBlockSpacingApplied: BuildSpacingApplied(spacing),
+            CorrespondingEmail: BuildCorrespondingEmail(email));
+    }
+
+    private static List<ReportEntry> FilterByRule(IReport report, string rule)
+    {
+        var filtered = new List<ReportEntry>();
+        foreach (var entry in report.Entries)
+        {
+            if (string.Equals(entry.Rule, rule, StringComparison.Ordinal))
+            {
+                filtered.Add(entry);
+            }
+        }
+
+        return filtered;
+    }
+
+    private static bool HasWarnOrError(IReadOnlyList<ReportEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.Level >= ReportLevel.Warn)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static DiagnosticAlignment? BuildAlignment(IReadOnlyList<ReportEntry> entries)
+    {
+        if (!HasWarnOrError(entries))
+        {
+            return null;
+        }
+
+        var doiOk = !HasWarnMessage(entries, ApplyHeaderAlignmentRule.MissingDoiParagraphMessage);
+        var sectionOk = !HasWarnMessage(entries, ApplyHeaderAlignmentRule.MissingSectionParagraphMessage);
+        var titleOk = !HasWarnMessage(entries, ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        return new DiagnosticAlignment(doiOk, sectionOk, titleOk);
+    }
+
+    private static DiagnosticAbstract? BuildAbstract(IReadOnlyList<ReportEntry> entries)
+    {
+        if (!HasWarnOrError(entries))
+        {
+            return null;
+        }
+
+        if (HasWarnMessage(entries, RewriteAbstractRule.AbstractNotFoundMessage))
+        {
+            return new DiagnosticAbstract(
+                HeadingRewritten: false,
+                BodyDeitalicized: false,
+                InternalItalicPreserved: false);
+        }
+
+        var stripped = HasInfoMessage(entries, RewriteAbstractRule.StructuralItalicRemovedMessage);
+        return new DiagnosticAbstract(
+            HeadingRewritten: true,
+            BodyDeitalicized: stripped,
+            InternalItalicPreserved: !stripped);
+    }
+
+    private static bool? BuildSpacingApplied(IReadOnlyList<ReportEntry> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return null;
+        }
+
+        return !HasWarnOrError(entries);
+    }
+
+    private static DiagnosticCorrespondingEmail? BuildCorrespondingEmail(IReadOnlyList<ReportEntry> entries)
+    {
+        ReportEntry? failure = null;
+        foreach (var entry in entries)
+        {
+            if (entry.Level == ReportLevel.Warn
+                && string.Equals(
+                    entry.Message,
+                    ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage,
+                    StringComparison.Ordinal))
+            {
+                failure = entry;
+                break;
+            }
+        }
+
+        if (failure is null)
+        {
+            return null;
+        }
+
+        return new DiagnosticCorrespondingEmail(Value: null, Reason: failure.Message);
+    }
+
+    private static bool HasWarnMessage(IReadOnlyList<ReportEntry> entries, string message)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.Level == ReportLevel.Warn
+                && string.Equals(entry.Message, message, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasInfoMessage(IReadOnlyList<ReportEntry> entries, string message)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.Level == ReportLevel.Info
+                && string.Equals(entry.Message, message, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static IReadOnlyList<DiagnosticIssue> BuildIssues(IReport report)

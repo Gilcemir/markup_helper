@@ -7,6 +7,7 @@ public sealed record DiagnosticDocument(
     string Status,
     DateTime ExtractedAt,
     DiagnosticFields Fields,
+    DiagnosticFormatting? Formatting,
     IReadOnlyList<DiagnosticIssue> Issues)
 {
     public bool Equals(DiagnosticDocument? other)
@@ -25,6 +26,7 @@ public sealed record DiagnosticDocument(
             && string.Equals(Status, other.Status, StringComparison.Ordinal)
             && ExtractedAt.Equals(other.ExtractedAt)
             && Fields.Equals(other.Fields)
+            && Equals(Formatting, other.Formatting)
             && Issues.SequenceEqual(other.Issues);
     }
 
@@ -35,6 +37,7 @@ public sealed record DiagnosticDocument(
         hash.Add(Status, StringComparer.Ordinal);
         hash.Add(ExtractedAt);
         hash.Add(Fields);
+        hash.Add(Formatting);
         foreach (var issue in Issues)
         {
             hash.Add(issue);
@@ -43,6 +46,21 @@ public sealed record DiagnosticDocument(
         return hash.ToHashCode();
     }
 }
+
+public sealed record DiagnosticFormatting(
+    DiagnosticAlignment? AlignmentApplied,
+    DiagnosticAbstract? AbstractFormatted,
+    bool? AuthorBlockSpacingApplied,
+    DiagnosticCorrespondingEmail? CorrespondingEmail);
+
+public sealed record DiagnosticAlignment(bool Doi, bool Section, bool Title);
+
+public sealed record DiagnosticAbstract(
+    bool HeadingRewritten,
+    bool BodyDeitalicized,
+    bool InternalItalicPreserved);
+
+public sealed record DiagnosticCorrespondingEmail(string? Value, string? Reason);
 
 public sealed record DiagnosticFields(
     DiagnosticField Doi,
