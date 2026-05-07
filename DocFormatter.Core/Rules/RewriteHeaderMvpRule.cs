@@ -1,4 +1,5 @@
 using DocFormatter.Core.Models;
+using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -19,6 +20,14 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
 
     public const string MissingAuthorsParagraphMessage =
         "authors paragraph not found; cannot rewrite header";
+
+    private readonly FormattingOptions _options;
+
+    public RewriteHeaderMvpRule(FormattingOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options;
+    }
 
     public string Name => nameof(RewriteHeaderMvpRule);
 
@@ -48,8 +57,11 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
         }
         else
         {
-            var authorsParagraph = HeaderParagraphLocator.FindAuthorsParagraph(body)
-                ?? throw new InvalidOperationException(MissingAuthorsParagraphMessage);
+            var authorParagraphs = HeaderParagraphLocator.FindAuthorsParagraphs(body, _options.AbstractMarkers);
+            if (authorParagraphs.Count == 0)
+            {
+                throw new InvalidOperationException(MissingAuthorsParagraphMessage);
+            }
 
             var newElements = new List<OpenXmlElement> { new Paragraph() };
             foreach (var author in renderableAuthors)
@@ -57,14 +69,17 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
                 newElements.Add(BuildAuthorParagraph(author));
             }
 
-            OpenXmlElement insertAfter = authorsParagraph;
+            OpenXmlElement insertAfter = authorParagraphs[^1];
             foreach (var element in newElements)
             {
                 body.InsertAfter(element, insertAfter);
                 insertAfter = element;
             }
 
-            authorsParagraph.Remove();
+            foreach (var paragraph in authorParagraphs)
+            {
+                paragraph.Remove();
+            }
         }
 
         if (ctx.Doi is not null)

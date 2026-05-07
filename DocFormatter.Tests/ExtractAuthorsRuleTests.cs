@@ -433,6 +433,37 @@ public sealed class ExtractAuthorsRuleTests
     }
 
     [Fact]
+    public void Apply_WithAuthorsAcrossTwoParagraphs_StoppedByAffiliationLine_EmitsBothAuthors()
+    {
+        // Mirrors artigo 1 da pasta examples/: 2 authors split across separate
+        // paragraphs, then an affiliation paragraph that begins with a
+        // superscript number which signals the end of the author block.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Thi Thanh Nga Le"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+        var body = AuthorsParagraphFactory.GetBody(doc);
+        var secondAuthors = new Paragraph(
+            new Run(new Text("Hoang Dang Khoa Do") { Space = SpaceProcessingModeValues.Preserve }),
+            AuthorsParagraphFactory.SuperscriptRun("1,2"));
+        var affiliation = new Paragraph(
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            new Run(new Text(" Faculty of Biology") { Space = SpaceProcessingModeValues.Preserve }));
+        body.AppendChild(secondAuthors);
+        body.AppendChild(affiliation);
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Equal(2, ctx.Authors.Count);
+        Assert.Equal("Thi Thanh Nga Le", ctx.Authors[0].Name);
+        Assert.Equal(new[] { "1" }, ctx.Authors[0].AffiliationLabels);
+        Assert.Equal("Hoang Dang Khoa Do", ctx.Authors[1].Name);
+        Assert.Equal(new[] { "1", "2" }, ctx.Authors[1].AffiliationLabels);
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
+    }
+
+    [Fact]
     public void Apply_WithLocalPathHyperlinkContainingOrcidId_ExtractsIdAndDropsHyperlink()
     {
         using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph();

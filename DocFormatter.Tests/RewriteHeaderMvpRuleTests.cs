@@ -12,7 +12,7 @@ namespace DocFormatter.Tests;
 
 public sealed class RewriteHeaderMvpRuleTests
 {
-    private static RewriteHeaderMvpRule CreateRule() => new();
+    private static RewriteHeaderMvpRule CreateRule() => new(new FormattingOptions());
 
     private static string ParagraphText(Paragraph p)
         => string.Concat(p.Descendants<Text>().Select(t => t.Text));
@@ -290,7 +290,7 @@ public sealed class RewriteHeaderMvpRuleTests
             new ExtractTopTableRule(new FormattingOptions()),
             new ParseHeaderLinesRule(),
             new ExtractAuthorsRule(new FormattingOptions()),
-            new RewriteHeaderMvpRule(),
+            new RewriteHeaderMvpRule(new FormattingOptions()),
         });
 
         var ctx = new FormattingContext();
@@ -342,7 +342,7 @@ public sealed class RewriteHeaderMvpRuleTests
             new ExtractTopTableRule(new FormattingOptions()),
             new ParseHeaderLinesRule(),
             new ExtractAuthorsRule(new FormattingOptions()),
-            new RewriteHeaderMvpRule(),
+            new RewriteHeaderMvpRule(new FormattingOptions()),
         });
 
         var ctx = new FormattingContext();
@@ -391,6 +391,46 @@ public sealed class RewriteHeaderMvpRuleTests
         Assert.True(IsSuperscript(authorRuns[1]));
         AssertTimesNewRoman12(authorRuns[2]); // ORCID id
 
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
+    }
+
+    [Fact]
+    public void Apply_WithAuthorsAcrossTwoParagraphs_RemovesBothAndInsertsRewrittenBlock()
+    {
+        // Bug B regression: when ExtractAuthorsRule pulls authors from two
+        // consecutive paragraphs, the rewriter must remove BOTH original
+        // paragraphs (not just the first) before inserting the new block.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Author A"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+        var body = AuthorsParagraphFactory.GetBody(doc);
+        var secondAuthors = new Paragraph(
+            new Run(new Text("Author B") { Space = SpaceProcessingModeValues.Preserve }),
+            AuthorsParagraphFactory.SuperscriptRun("2"));
+        body.AppendChild(secondAuthors);
+
+        var ctx = new FormattingContext
+        {
+            Doi = "10.1234/abc",
+            ArticleTitle = AuthorsParagraphFactory.TitleText,
+        };
+        ctx.Authors.Add(new Author("Author A", new[] { "1" }, OrcidId: null));
+        ctx.Authors.Add(new Author("Author B", new[] { "2" }, OrcidId: null));
+
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var paragraphs = body.Elements<Paragraph>().ToList();
+        Assert.Equal(6, paragraphs.Count);
+        Assert.Equal("10.1234/abc", ParagraphText(paragraphs[0]));
+        Assert.Equal(AuthorsParagraphFactory.SectionText, ParagraphText(paragraphs[1]));
+        Assert.Equal(AuthorsParagraphFactory.TitleText, ParagraphText(paragraphs[2]));
+        Assert.Equal(string.Empty, ParagraphText(paragraphs[3]));
+        Assert.Equal("Author A1", ParagraphText(paragraphs[4]));
+        Assert.Equal("Author B2", ParagraphText(paragraphs[5]));
+
+        // Both original author paragraphs must be gone.
+        Assert.DoesNotContain(secondAuthors, body.Elements<Paragraph>());
         Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
     }
 

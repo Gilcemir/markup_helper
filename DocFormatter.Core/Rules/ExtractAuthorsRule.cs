@@ -37,36 +37,52 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
         var body = mainPart.Document?.Body
             ?? throw new InvalidOperationException("document is missing its body");
 
-        var paragraph = HeaderParagraphLocator.FindAuthorsParagraph(body);
-        if (paragraph is null)
+        var paragraphs = HeaderParagraphLocator.FindAuthorsParagraphs(body, _options.AbstractMarkers);
+        if (paragraphs.Count == 0)
         {
             report.Warn(Name, MissingAuthorsParagraphMessage);
             return;
         }
 
         var builders = new List<AuthorBuilder> { new() };
-        var hyperlinksToRemove = new List<Hyperlink>();
+        var hyperlinksToRemove = new List<(Paragraph Paragraph, Hyperlink Hyperlink)>();
         var relationshipsToDelete = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var child in paragraph.ChildElements)
+        for (var i = 0; i < paragraphs.Count; i++)
         {
-            switch (child)
+            var paragraph = paragraphs[i];
+
+            // Cross-paragraph boundary: if the previous paragraph already
+            // produced a non-empty author, treat the line break as an implicit
+            // separator and start a fresh builder for the next author.
+            if (i > 0 && !IsBuilderEmpty(builders[^1]))
             {
-                case Run run:
-                    HandleRun(run, builders);
-                    break;
-                case Hyperlink hyperlink:
-                    HandleHyperlink(hyperlink, mainPart, builders, hyperlinksToRemove, relationshipsToDelete, report);
-                    break;
+                builders.Add(new AuthorBuilder());
+            }
+
+            foreach (var child in paragraph.ChildElements)
+            {
+                switch (child)
+                {
+                    case Run run:
+                        HandleRun(run, builders);
+                        break;
+                    case Hyperlink hyperlink:
+                        HandleHyperlink(hyperlink, mainPart, builders, paragraph, hyperlinksToRemove, relationshipsToDelete, report);
+                        break;
+                }
             }
         }
 
         FlagSuspicions(builders);
         EmitAuthors(builders, ctx, report);
 
-        WarnOnFreeStandingOrcidBadges(paragraph, mainPart, report);
+        foreach (var paragraph in paragraphs)
+        {
+            WarnOnFreeStandingOrcidBadges(paragraph, mainPart, report);
+        }
 
-        foreach (var hyperlink in hyperlinksToRemove)
+        foreach (var (paragraph, hyperlink) in hyperlinksToRemove)
         {
             paragraph.RemoveChild(hyperlink);
         }
@@ -102,7 +118,8 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
         Hyperlink hyperlink,
         MainDocumentPart mainPart,
         List<AuthorBuilder> builders,
-        List<Hyperlink> hyperlinksToRemove,
+        Paragraph owningParagraph,
+        List<(Paragraph Paragraph, Hyperlink Hyperlink)> hyperlinksToRemove,
         HashSet<string> relationshipsToDelete,
         IReport report)
     {
@@ -141,7 +158,7 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
             ProcessTextRun(innerText, builders);
         }
 
-        hyperlinksToRemove.Add(hyperlink);
+        hyperlinksToRemove.Add((owningParagraph, hyperlink));
         if (!string.IsNullOrEmpty(rId))
         {
             relationshipsToDelete.Add(rId);
