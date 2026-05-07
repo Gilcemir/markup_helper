@@ -73,11 +73,6 @@ public sealed class LocateAbstractAndInsertElocationRule : IFormattingRule
                     continue;
                 }
 
-                if (!IsBold(run))
-                {
-                    break;
-                }
-
                 var trimmed = raw.TrimStart();
                 foreach (var marker in _options.AbstractMarkers)
                 {
@@ -92,16 +87,5 @@ public sealed class LocateAbstractAndInsertElocationRule : IFormattingRule
         }
 
         return null;
-    }
-
-    private static bool IsBold(Run run)
-    {
-        var bold = run.RunProperties?.Bold;
-        if (bold is null)
-        {
-            return false;
-        }
-
-        return bold.Val is null || bold.Val.Value;
     }
 }

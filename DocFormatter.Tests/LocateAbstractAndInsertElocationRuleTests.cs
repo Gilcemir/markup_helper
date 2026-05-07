@@ -127,11 +127,15 @@ public sealed class LocateAbstractAndInsertElocationRuleTests
     }
 
     [Fact]
-    public void Apply_WithNonBoldAbstractPrefix_DoesNotMatch()
+    public void Apply_WithNonBoldAbstractPrefix_StillMatches()
     {
+        // Real-world Word docs sometimes leave the "Abstract" prefix unbold while
+        // bolding only the body that follows (artigo 10 da pasta examples/). The
+        // heuristic only inspects the first textual run, so body paragraphs that
+        // happen to start with words other than the marker are unaffected.
         var section = PlainParagraph("Original Article");
         var title = PlainParagraph("Title");
-        var nonBoldAbstract = PlainParagraph("Abstract — should not match without bold");
+        var nonBoldAbstract = PlainParagraph("Abstract — body that should match without bold");
 
         using var doc = CreateDocumentWith(section, title, nonBoldAbstract);
 
@@ -141,9 +145,41 @@ public sealed class LocateAbstractAndInsertElocationRuleTests
         CreateRule().Apply(doc, ctx, report);
 
         var paragraphs = GetBody(doc).Elements<Paragraph>().ToList();
-        Assert.Equal(3, paragraphs.Count);
-        var warn = Assert.Single(report.Entries, e => e.Level == ReportLevel.Warn);
-        Assert.Equal(LocateAbstractAndInsertElocationRule.AbstractNotFoundMessage, warn.Message);
+        Assert.Equal(4, paragraphs.Count);
+        Assert.Equal("e2024005", ParagraphText(paragraphs[2]));
+        Assert.Same(nonBoldAbstract, paragraphs[3]);
+        Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
+    }
+
+    [Fact]
+    public void Apply_WithFirstRunAbstractNonBoldThenBoldBody_StillMatches()
+    {
+        // Mirrors artigo 10 exactly: "Abstract" run is not bold, " " run not bold,
+        // then "-", " " and the body are bold/italic.
+        var section = PlainParagraph("Original Article");
+        var title = PlainParagraph("Title");
+        var abstractRun = new Run(new Text("Abstract") { Space = SpaceProcessingModeValues.Preserve });
+        var spaceRun = new Run(new Text(" ") { Space = SpaceProcessingModeValues.Preserve });
+        var dashBoldRun = new Run(
+            new RunProperties(new Bold()),
+            new Text("-") { Space = SpaceProcessingModeValues.Preserve });
+        var bodyBoldRun = new Run(
+            new RunProperties(new Bold(), new Italic()),
+            new Text(" This study aimed...") { Space = SpaceProcessingModeValues.Preserve });
+        var paragraph = new Paragraph(abstractRun, spaceRun, dashBoldRun, bodyBoldRun);
+
+        using var doc = CreateDocumentWith(section, title, paragraph);
+
+        var ctx = new FormattingContext { ElocationId = "e2024020" };
+        var report = new Report();
+
+        CreateRule().Apply(doc, ctx, report);
+
+        var paragraphs = GetBody(doc).Elements<Paragraph>().ToList();
+        Assert.Equal(4, paragraphs.Count);
+        Assert.Equal("e2024020", ParagraphText(paragraphs[2]));
+        Assert.Same(paragraph, paragraphs[3]);
+        Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
     }
 
     [Fact]
