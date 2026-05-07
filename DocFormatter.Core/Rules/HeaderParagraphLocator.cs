@@ -1,3 +1,4 @@
+using System.Text;
 using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocFormatter.Core.Rules;
@@ -12,26 +13,24 @@ internal static class HeaderParagraphLocator
         ArgumentNullException.ThrowIfNull(abstractMarkers);
 
         var collected = new List<Paragraph>();
-        var nonEmptyCount = 0;
+        var nonEmptyLineCount = 0;
 
         foreach (var paragraph in body.Elements<Paragraph>())
         {
-            var text = string.Concat(paragraph.Descendants<Text>().Select(t => t.Text));
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                continue;
-            }
-
-            nonEmptyCount++;
-
-            if (nonEmptyCount < 3)
+            var nonEmptyLines = CountNonEmptyLogicalLines(paragraph);
+            if (nonEmptyLines == 0)
             {
                 continue;
             }
 
             if (collected.Count == 0)
             {
-                collected.Add(paragraph);
+                nonEmptyLineCount += nonEmptyLines;
+                if (nonEmptyLineCount >= 3)
+                {
+                    collected.Add(paragraph);
+                }
+
                 continue;
             }
 
@@ -44,6 +43,50 @@ internal static class HeaderParagraphLocator
         }
 
         return collected;
+    }
+
+    private static int CountNonEmptyLogicalLines(Paragraph paragraph)
+    {
+        var lines = 0;
+        var current = new StringBuilder();
+
+        foreach (var node in paragraph.Descendants())
+        {
+            switch (node)
+            {
+                case Text t:
+                    current.Append(t.Text);
+                    break;
+                case Break:
+                    if (!IsBlank(current))
+                    {
+                        lines++;
+                    }
+
+                    current.Clear();
+                    break;
+            }
+        }
+
+        if (!IsBlank(current))
+        {
+            lines++;
+        }
+
+        return lines;
+
+        static bool IsBlank(StringBuilder sb)
+        {
+            for (var i = 0; i < sb.Length; i++)
+            {
+                if (!char.IsWhiteSpace(sb[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 
     private static bool LooksLikeAffiliationOrAbstract(

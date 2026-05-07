@@ -510,6 +510,40 @@ public sealed class ExtractAuthorsRuleTests
     }
 
     [Fact]
+    public void Apply_WhenSectionAndTitleShareFirstParagraph_LocatesAuthorsAtSecondParagraph()
+    {
+        // Bug B+C interaction: artigo 4 da pasta examples/ has section+title
+        // packed into P[0] with a <w:br/> between them. Counting paragraphs
+        // would put authors at the third non-empty paragraph (which is the
+        // affiliation line). Counting logical lines correctly puts authors at
+        // the second paragraph (line 3 overall: section, title, authors).
+        var stream = new MemoryStream();
+        using var doc = WordprocessingDocument.Create(stream, WordprocessingDocumentType.Document);
+        var mainPart = doc.AddMainDocumentPart();
+        var firstParagraph = new Paragraph(
+            new Run(new Text("ARTICLE") { Space = SpaceProcessingModeValues.Preserve }),
+            new Run(new Break()),
+            new Run(new Text("Long Title Goes Here") { Space = SpaceProcessingModeValues.Preserve }));
+        var authorsParagraph = new Paragraph(
+            new Run(new Text("Author A") { Space = SpaceProcessingModeValues.Preserve }),
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            new Run(new Text(", Author B") { Space = SpaceProcessingModeValues.Preserve }),
+            AuthorsParagraphFactory.SuperscriptRun("2"));
+        var affiliation = new Paragraph(
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            new Run(new Text(" Universidade X") { Space = SpaceProcessingModeValues.Preserve }));
+        mainPart.Document = new Document(new Body(firstParagraph, authorsParagraph, affiliation));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Equal(2, ctx.Authors.Count);
+        Assert.Equal("Author A", ctx.Authors[0].Name);
+        Assert.Equal("Author B", ctx.Authors[1].Name);
+    }
+
+    [Fact]
     public void Apply_WithAuthorsAcrossTwoParagraphs_StoppedByAffiliationLine_EmitsBothAuthors()
     {
         // Mirrors artigo 1 da pasta examples/: 2 authors split across separate
