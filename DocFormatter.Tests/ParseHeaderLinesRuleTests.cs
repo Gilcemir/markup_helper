@@ -66,6 +66,8 @@ public sealed class ParseHeaderLinesRuleTests
         rule.Apply(doc, ctx, report);
 
         Assert.Equal("On the Behavior of...", ctx.ArticleTitle);
+        Assert.Same(section, ctx.SectionParagraph);
+        Assert.Same(title, ctx.TitleParagraph);
         var paragraphs = GetBody(doc).Elements<Paragraph>().ToList();
         Assert.Equal(3, paragraphs.Count);
         Assert.Equal("Original Article", string.Concat(paragraphs[0].Descendants<Text>().Select(t => t.Text)));
@@ -189,11 +191,47 @@ public sealed class ParseHeaderLinesRuleTests
         rule.Apply(doc, ctx, report);
 
         Assert.Equal("Protein selection gain", ctx.ArticleTitle);
+        Assert.Same(firstParagraph, ctx.SectionParagraph);
+        Assert.Same(firstParagraph, ctx.TitleParagraph);
         Assert.Contains(
             report.Entries,
             e => e.Level == ReportLevel.Info
                 && e.Message.Contains("section='ARTICLE'", StringComparison.Ordinal)
                 && e.Message.Contains("articleTitle='Protein selection gain'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_WhenOnlySectionParagraphPresent_DoesNotPublishParagraphReferences()
+    {
+        var section = BuildParagraph("Original Article");
+        using var doc = CreateDocumentWith(section);
+        var rule = new ParseHeaderLinesRule();
+        var ctx = new FormattingContext();
+        var report = new Report();
+
+        Assert.Throws<InvalidOperationException>(() => rule.Apply(doc, ctx, report));
+
+        Assert.Null(ctx.SectionParagraph);
+        Assert.Null(ctx.TitleParagraph);
+    }
+
+    [Fact]
+    public void Apply_WhenSectionAndTitleAreInSeparatePostBlankParagraphs_AssignsExactParagraphReferences()
+    {
+        var leadingBlank = BuildParagraph(string.Empty);
+        var section = BuildParagraph("Original Article");
+        var midBlank = BuildParagraph("   ");
+        var title = BuildParagraph("On the Behavior of...");
+        using var doc = CreateDocumentWith(leadingBlank, section, midBlank, title);
+        var rule = new ParseHeaderLinesRule();
+        var ctx = new FormattingContext();
+        var report = new Report();
+
+        rule.Apply(doc, ctx, report);
+
+        Assert.Same(section, ctx.SectionParagraph);
+        Assert.Same(title, ctx.TitleParagraph);
+        Assert.NotSame(ctx.SectionParagraph, ctx.TitleParagraph);
     }
 
     [Fact]
@@ -220,6 +258,8 @@ public sealed class ParseHeaderLinesRuleTests
         Assert.Equal("e2024001", ctx.ElocationId);
         Assert.Equal("10.1234/abc", ctx.Doi);
         Assert.Equal("On the Behavior of...", ctx.ArticleTitle);
+        Assert.Same(section, ctx.SectionParagraph);
+        Assert.Same(title, ctx.TitleParagraph);
         Assert.Empty(GetBody(doc).Elements<Table>());
         Assert.Equal(3, GetBody(doc).Elements<Paragraph>().Count());
         Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);

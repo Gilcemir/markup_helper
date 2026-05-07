@@ -28,6 +28,8 @@ public sealed class ParseHeaderLinesRule : IFormattingRule
 
         string? section = null;
         string? title = null;
+        Paragraph? sectionParagraph = null;
+        Paragraph? titleParagraph = null;
 
         foreach (var paragraph in body.Elements<Paragraph>())
         {
@@ -41,10 +43,12 @@ public sealed class ParseHeaderLinesRule : IFormattingRule
                 if (section is null)
                 {
                     section = line;
+                    sectionParagraph = paragraph;
                     continue;
                 }
 
                 title = line;
+                titleParagraph = paragraph;
                 break;
             }
 
@@ -65,6 +69,8 @@ public sealed class ParseHeaderLinesRule : IFormattingRule
         }
 
         ctx.ArticleTitle = title;
+        ctx.SectionParagraph = sectionParagraph;
+        ctx.TitleParagraph = titleParagraph;
         report.Info(Name, $"section='{section}', articleTitle='{title}'");
     }
 
