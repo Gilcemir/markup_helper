@@ -80,6 +80,77 @@ public sealed class FormattingOptionsTests
         Assert.DoesNotContain("orcid", author.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("foo@y.edu")]
+    [InlineData("first.last+tag@u-aberta.pt")]
+    [InlineData("Maria.Silva@usp.br")]
+    public void EmailRegex_Matches_RepresentativeAddresses(string email)
+    {
+        Assert.Matches(_options.EmailRegex, email);
+    }
+
+    [Theory]
+    [InlineData("foo@bar")]
+    [InlineData("foo@.edu")]
+    [InlineData("@y.edu")]
+    public void EmailRegex_DoesNotMatch_MalformedAddresses(string candidate)
+    {
+        Assert.DoesNotMatch(_options.EmailRegex, candidate);
+    }
+
+    [Theory]
+    [InlineData("* E-mail:")]
+    [InlineData("*  E-mail :")]
+    [InlineData("*Email:")]
+    [InlineData("* email :")]
+    public void CorrespondingMarkerRegex_Matches_StarEmailVariants(string marker)
+    {
+        Assert.Matches(_options.CorrespondingMarkerRegex, marker);
+    }
+
+    [Theory]
+    [InlineData("*")]
+    [InlineData("E-mail:")]
+    public void CorrespondingMarkerRegex_DoesNotMatch_BareTokens(string candidate)
+    {
+        Assert.DoesNotMatch(_options.CorrespondingMarkerRegex, candidate);
+    }
+
+    [Theory]
+    [InlineData("Corresponding Author:")]
+    [InlineData("coresponding author -")]
+    [InlineData("Correspondign Author")]
+    [InlineData("Correspondent Autor")]
+    [InlineData("corresponding author —")]
+    public void CorrespondingAuthorLabelRegex_Matches_TypoTolerantVariants(string label)
+    {
+        Assert.Matches(_options.CorrespondingAuthorLabelRegex, label);
+    }
+
+    [Fact]
+    public void CorrespondingAuthorLabelRegex_DoesNotMatch_CorrespondenceLabel()
+    {
+        Assert.DoesNotMatch(_options.CorrespondingAuthorLabelRegex, "Correspondence:");
+    }
+
+    [Fact]
+    public void EmailRegex_ReturnsSameInstanceOnRepeatedReads()
+    {
+        Assert.Same(_options.EmailRegex, _options.EmailRegex);
+    }
+
+    [Fact]
+    public void CorrespondingMarkerRegex_ReturnsSameInstanceOnRepeatedReads()
+    {
+        Assert.Same(_options.CorrespondingMarkerRegex, _options.CorrespondingMarkerRegex);
+    }
+
+    [Fact]
+    public void CorrespondingAuthorLabelRegex_ReturnsSameInstanceOnRepeatedReads()
+    {
+        Assert.Same(_options.CorrespondingAuthorLabelRegex, _options.CorrespondingAuthorLabelRegex);
+    }
+
     [Fact]
     public void FormattingOptions_RegisteredAsSingleton_ResolvesSameInstanceAcrossScopes()
     {

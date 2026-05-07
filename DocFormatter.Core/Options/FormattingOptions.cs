@@ -10,6 +10,12 @@ public sealed partial class FormattingOptions
 
     public Regex ElocationRegex { get; } = BuildElocationRegex();
 
+    public Regex EmailRegex { get; } = BuildEmailRegex();
+
+    public Regex CorrespondingMarkerRegex { get; } = BuildCorrespondingMarkerRegex();
+
+    public Regex CorrespondingAuthorLabelRegex { get; } = BuildCorrespondingAuthorLabelRegex();
+
     public string OrcidUrlMarker { get; } = "orcid.org";
 
     public IReadOnlyList<string> AuthorSeparators { get; } = new[] { ", ", " and " };
@@ -32,4 +38,13 @@ public sealed partial class FormattingOptions
 
     [GeneratedRegex(@"^[eE]\d+$", RegexOptions.CultureInvariant)]
     private static partial Regex BuildElocationRegex();
+
+    [GeneratedRegex(@"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex BuildEmailRegex();
+
+    [GeneratedRegex(@"\* *E-?mail *:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex BuildCorrespondingMarkerRegex();
+
+    [GeneratedRegex(@"^\s*c[oa]rr?es?p[a-z]*\s+au[a-z]*\b\s*[:\-—]?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex BuildCorrespondingAuthorLabelRegex();
 }
