@@ -1,11 +1,14 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using DocFormatter.Cli;
+using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Reporting;
 using DocFormatter.Core.Rules;
+using DocFormatter.Tests.Fixtures.Phase2;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DocFormatter.Tests;
@@ -246,6 +249,187 @@ public sealed class CliIntegrationTests : IDisposable
 
         var logPath = Path.Combine(_tempDir, "formatted", "_app.log");
         Assert.True(File.Exists(logPath));
+    }
+
+    [Fact]
+    public void BuildServiceProvider_RegistersFormattingRulesInTechSpecOrder()
+    {
+        using var services = CliApp.BuildServiceProvider();
+
+        var rules = services.GetServices<IFormattingRule>().Select(r => r.GetType()).ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                typeof(ExtractTopTableRule),
+                typeof(ParseHeaderLinesRule),
+                typeof(ExtractAuthorsRule),
+                typeof(ExtractCorrespondingAuthorRule),
+                typeof(RewriteHeaderMvpRule),
+                typeof(ApplyHeaderAlignmentRule),
+                typeof(EnsureAuthorBlockSpacingRule),
+                typeof(RewriteAbstractRule),
+                typeof(LocateAbstractAndInsertElocationRule),
+            },
+            rules);
+    }
+
+    [Fact]
+    public void Run_Phase2_WithCorrespondingMarker_AppliesAllFourBehaviorsEndToEnd()
+    {
+        var sourcePath = Path.Combine(_tempDir, "phase2-marker.docx");
+        Phase2DocxFixtureBuilder.WriteWithCorrespondingMarker(sourcePath);
+
+        var exit = CliApp.Run(new[] { sourcePath }, new StringWriter(), new StringWriter());
+        Assert.Equal(0, exit);
+
+        var formattedPath = Path.Combine(_tempDir, "formatted", "phase2-marker.docx");
+        Assert.True(File.Exists(formattedPath));
+
+        using var doc = WordprocessingDocument.Open(formattedPath, isEditable: false);
+        var paragraphs = doc.MainDocumentPart!.Document!.Body!.Elements<Paragraph>().ToList();
+
+        var doiIdx = FindParagraphIndex(paragraphs, p => p.InnerText.Contains(Phase2DocxFixtureBuilder.Doi));
+        var sectionIdx = FindParagraphIndex(paragraphs, p => p.InnerText == Phase2DocxFixtureBuilder.SectionText);
+        var titleIdx = FindParagraphIndex(paragraphs, p => p.InnerText == Phase2DocxFixtureBuilder.TitleText);
+        var authorIdx = FindParagraphIndex(paragraphs, p => p.InnerText.StartsWith(Phase2DocxFixtureBuilder.AuthorName, StringComparison.Ordinal));
+        var aff1Idx = FindParagraphIndex(paragraphs, p => p.InnerText.Contains(Phase2DocxFixtureBuilder.Affiliation1Text));
+        var aff2Idx = FindParagraphIndex(paragraphs, p => p.InnerText.Contains(Phase2DocxFixtureBuilder.Affiliation2Text));
+        var emailIdx = FindParagraphIndex(paragraphs, p => p.InnerText.StartsWith("Corresponding author:", StringComparison.Ordinal));
+        var headingIdx = FindParagraphIndex(paragraphs, IsBoldOnlyAbstractHeading);
+
+        Assert.Equal(JustificationValues.Right, JustificationOf(paragraphs[doiIdx]));
+        Assert.Equal(JustificationValues.Right, JustificationOf(paragraphs[sectionIdx]));
+        Assert.Equal(JustificationValues.Center, JustificationOf(paragraphs[titleIdx]));
+
+        Assert.Equal(authorIdx + 2, aff1Idx);
+        Assert.True(IsBlankParagraph(paragraphs[authorIdx + 1]));
+
+        Assert.Equal(
+            "Corresponding author: " + Phase2DocxFixtureBuilder.CorrespondingEmail,
+            paragraphs[emailIdx].InnerText);
+        Assert.True(emailIdx > aff2Idx);
+        Assert.True(emailIdx < headingIdx);
+
+        var bodyParagraph = paragraphs[headingIdx + 1];
+        Assert.Equal(AbstractParagraphFactory.DefaultBodyText, bodyParagraph.InnerText);
+        Assert.All(bodyParagraph.Descendants<Run>(), run => Assert.Null(run.RunProperties?.Italic));
+
+        var trailerStripped = !paragraphs[aff2Idx].InnerText.Contains("E-mail", StringComparison.OrdinalIgnoreCase);
+        Assert.True(trailerStripped, $"affiliation 2 still carries the email trailer: '{paragraphs[aff2Idx].InnerText}'");
+    }
+
+    [Fact]
+    public void Run_Phase2_WithoutCorrespondingMarker_AlignsSpacesAndRewritesAbstract_NoCorrespondingLine()
+    {
+        var sourcePath = Path.Combine(_tempDir, "phase2-nomarker.docx");
+        Phase2DocxFixtureBuilder.WriteWithoutCorrespondingMarker(sourcePath);
+
+        var exit = CliApp.Run(new[] { sourcePath }, new StringWriter(), new StringWriter());
+        Assert.Equal(0, exit);
+
+        var formattedPath = Path.Combine(_tempDir, "formatted", "phase2-nomarker.docx");
+        using var doc = WordprocessingDocument.Open(formattedPath, isEditable: false);
+        var paragraphs = doc.MainDocumentPart!.Document!.Body!.Elements<Paragraph>().ToList();
+
+        var sectionIdx = FindParagraphIndex(paragraphs, p => p.InnerText == Phase2DocxFixtureBuilder.SectionText);
+        var titleIdx = FindParagraphIndex(paragraphs, p => p.InnerText == Phase2DocxFixtureBuilder.TitleText);
+        var authorIdx = FindParagraphIndex(paragraphs, p => p.InnerText.StartsWith(Phase2DocxFixtureBuilder.AuthorName, StringComparison.Ordinal));
+        var aff1Idx = FindParagraphIndex(paragraphs, p => p.InnerText.Contains(Phase2DocxFixtureBuilder.Affiliation1Text));
+        var headingIdx = FindParagraphIndex(paragraphs, IsBoldOnlyAbstractHeading);
+
+        Assert.Equal(JustificationValues.Right, JustificationOf(paragraphs[sectionIdx]));
+        Assert.Equal(JustificationValues.Center, JustificationOf(paragraphs[titleIdx]));
+        Assert.Equal(authorIdx + 2, aff1Idx);
+        Assert.True(IsBlankParagraph(paragraphs[authorIdx + 1]));
+
+        Assert.DoesNotContain(paragraphs, p => p.InnerText.StartsWith("Corresponding author:", StringComparison.Ordinal));
+
+        var bodyParagraph = paragraphs[headingIdx + 1];
+        Assert.Equal(AbstractParagraphFactory.DefaultBodyText, bodyParagraph.InnerText);
+        Assert.All(bodyParagraph.Descendants<Run>(), run => Assert.Null(run.RunProperties?.Italic));
+    }
+
+    [Fact]
+    public void Run_Phase2_WithResumoSource_NormalizesHeadingToAbstract_KeepsBodyLanguage()
+    {
+        var sourcePath = Path.Combine(_tempDir, "phase2-resumo.docx");
+        Phase2DocxFixtureBuilder.WriteWithResumoSource(sourcePath);
+
+        var exit = CliApp.Run(new[] { sourcePath }, new StringWriter(), new StringWriter());
+        Assert.Equal(0, exit);
+
+        var formattedPath = Path.Combine(_tempDir, "formatted", "phase2-resumo.docx");
+        using var doc = WordprocessingDocument.Open(formattedPath, isEditable: false);
+        var paragraphs = doc.MainDocumentPart!.Document!.Body!.Elements<Paragraph>().ToList();
+
+        var headingIdx = FindParagraphIndex(paragraphs, IsBoldOnlyAbstractHeading);
+        Assert.Equal("Abstract", paragraphs[headingIdx].InnerText);
+
+        var bodyParagraph = paragraphs[headingIdx + 1];
+        Assert.Equal(AbstractParagraphFactory.DefaultPortugueseBodyText, bodyParagraph.InnerText);
+    }
+
+    [Fact]
+    public void Run_Phase2_WithMalformedEmail_PopulatesFormattingDiagnosticSection()
+    {
+        var sourcePath = Path.Combine(_tempDir, "phase2-bad-email.docx");
+        Phase2DocxFixtureBuilder.WriteWithMalformedEmail(sourcePath);
+
+        var exit = CliApp.Run(new[] { sourcePath }, new StringWriter(), new StringWriter());
+        Assert.Equal(0, exit);
+
+        var diagnosticPath = Path.Combine(_tempDir, "formatted", "phase2-bad-email.diagnostic.json");
+        Assert.True(File.Exists(diagnosticPath));
+
+        var doc = JsonSerializer.Deserialize<DiagnosticDocument>(
+            File.ReadAllText(diagnosticPath),
+            DiagnosticWriter.JsonOptions);
+        Assert.NotNull(doc);
+        Assert.NotNull(doc!.Formatting);
+        Assert.NotNull(doc.Formatting!.CorrespondingEmail);
+        Assert.Null(doc.Formatting.CorrespondingEmail!.Value);
+        Assert.Equal(
+            ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage,
+            doc.Formatting.CorrespondingEmail.Reason);
+    }
+
+    private static int FindParagraphIndex(IReadOnlyList<Paragraph> paragraphs, Func<Paragraph, bool> predicate)
+    {
+        for (var i = 0; i < paragraphs.Count; i++)
+        {
+            if (predicate(paragraphs[i]))
+            {
+                return i;
+            }
+        }
+
+        throw new InvalidOperationException("paragraph not found");
+    }
+
+    private static JustificationValues? JustificationOf(Paragraph paragraph)
+        => paragraph.ParagraphProperties?.GetFirstChild<Justification>()?.Val?.Value;
+
+    private static bool IsBlankParagraph(Paragraph paragraph)
+        => string.IsNullOrWhiteSpace(paragraph.InnerText);
+
+    private static bool IsBoldOnlyAbstractHeading(Paragraph paragraph)
+    {
+        var runs = paragraph.Elements<Run>().ToList();
+        if (runs.Count != 1)
+        {
+            return false;
+        }
+
+        var run = runs[0];
+        var bold = run.RunProperties?.GetFirstChild<Bold>();
+        if (bold is null)
+        {
+            return false;
+        }
+
+        var text = string.Concat(run.Descendants<Text>().Select(t => t.Text));
+        return text == "Abstract";
     }
 
     private static string HashFile(string path)

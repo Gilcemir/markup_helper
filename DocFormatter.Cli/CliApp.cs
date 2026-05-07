@@ -196,7 +196,7 @@ internal static class CliApp
             .CreateLogger();
     }
 
-    private static ServiceProvider BuildServiceProvider()
+    internal static ServiceProvider BuildServiceProvider()
     {
         var services = new ServiceCollection();
         services.AddSingleton<FormattingOptions>();
@@ -206,7 +206,11 @@ internal static class CliApp
         services.AddTransient<IFormattingRule, ExtractTopTableRule>();
         services.AddTransient<IFormattingRule, ParseHeaderLinesRule>();
         services.AddTransient<IFormattingRule, ExtractAuthorsRule>();
+        services.AddTransient<IFormattingRule, ExtractCorrespondingAuthorRule>();
         services.AddTransient<IFormattingRule, RewriteHeaderMvpRule>();
+        services.AddTransient<IFormattingRule, ApplyHeaderAlignmentRule>();
+        services.AddTransient<IFormattingRule, EnsureAuthorBlockSpacingRule>();
+        services.AddTransient<IFormattingRule, RewriteAbstractRule>();
         services.AddTransient<IFormattingRule, LocateAbstractAndInsertElocationRule>();
 
         services.AddTransient<FormattingPipeline>();
