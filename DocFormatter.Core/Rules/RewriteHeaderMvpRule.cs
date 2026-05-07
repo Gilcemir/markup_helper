@@ -59,9 +59,12 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
             }
 
             var newElements = new List<OpenXmlElement> { new Paragraph() };
+            Paragraph? lastAuthorParagraph = null;
             foreach (var author in renderableAuthors)
             {
-                newElements.Add(BuildAuthorParagraph(author));
+                var authorParagraph = BuildAuthorParagraph(author);
+                newElements.Add(authorParagraph);
+                lastAuthorParagraph = authorParagraph;
             }
 
             OpenXmlElement insertAfter = authorParagraphs[^1];
@@ -75,6 +78,8 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
             {
                 paragraph.Remove();
             }
+
+            ctx.AuthorBlockEndParagraph = lastAuthorParagraph;
         }
 
         if (ctx.Doi is not null)
@@ -89,6 +94,8 @@ public sealed class RewriteHeaderMvpRule : IFormattingRule
             {
                 body.InsertBefore(doiParagraph, firstContent);
             }
+
+            ctx.DoiParagraph = doiParagraph;
 
             report.Info(Name, $"DOI line inserted at top: '{ctx.Doi}'");
         }

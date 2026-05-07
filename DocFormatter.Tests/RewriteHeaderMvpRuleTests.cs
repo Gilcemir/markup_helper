@@ -54,6 +54,9 @@ public sealed class RewriteHeaderMvpRuleTests
         Assert.True(IsSuperscript(authorRuns[1]));
         Assert.Equal("1", authorRuns[1].InnerText);
 
+        Assert.Same(paragraphs[0], ctx.DoiParagraph);
+        Assert.Same(paragraphs[4], ctx.AuthorBlockEndParagraph);
+
         Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Warn || e.Level == ReportLevel.Error);
     }
 
@@ -83,6 +86,8 @@ public sealed class RewriteHeaderMvpRuleTests
 
         var warn = Assert.Single(report.Entries, e => e.Level == ReportLevel.Warn);
         Assert.Equal(RewriteHeaderMvpRule.MissingDoiMessage, warn.Message);
+        Assert.Null(ctx.DoiParagraph);
+        Assert.Same(paragraphs[3], ctx.AuthorBlockEndParagraph);
     }
 
     [Fact]
@@ -120,6 +125,9 @@ public sealed class RewriteHeaderMvpRuleTests
         Assert.True(IsSuperscript(bRuns[1]));
         Assert.False(IsSuperscript(bRuns[2]));
         Assert.Equal(" 0000-0002-1825-0097", bRuns[2].InnerText);
+
+        Assert.Same(paragraphs[0], ctx.DoiParagraph);
+        Assert.Same(paragraphs[5], ctx.AuthorBlockEndParagraph);
     }
 
     [Fact]
@@ -145,6 +153,8 @@ public sealed class RewriteHeaderMvpRuleTests
 
         var warn = Assert.Single(report.Entries, e => e.Level == ReportLevel.Warn);
         Assert.Equal(RewriteHeaderMvpRule.EmptyAuthorsMessage, warn.Message);
+        Assert.Same(paragraphs[0], ctx.DoiParagraph);
+        Assert.Null(ctx.AuthorBlockEndParagraph);
     }
 
     [Fact]
@@ -268,6 +278,32 @@ public sealed class RewriteHeaderMvpRuleTests
         var paragraphs = AuthorsParagraphFactory.GetBody(doc).Elements<Paragraph>().ToList();
         Assert.Equal("Maria Silva1", ParagraphText(paragraphs[4]));
         Assert.Equal(5, paragraphs.Count);
+        Assert.Same(paragraphs[4], ctx.AuthorBlockEndParagraph);
+    }
+
+    [Fact]
+    public void Apply_WhenOnlyEmptyNameAuthorRecords_LeavesAuthorBlockEndParagraphNull()
+    {
+        // ctx.Authors is non-empty, but every record has an empty name, so
+        // renderableAuthors is empty and no author paragraph is appended —
+        // AuthorBlockEndParagraph must stay null even though the author block
+        // rewrite branch ran.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("ignored"));
+
+        var ctx = new FormattingContext
+        {
+            Doi = "10.1234/abc",
+            ArticleTitle = AuthorsParagraphFactory.TitleText,
+        };
+        ctx.Authors.Add(new Author(string.Empty, Array.Empty<string>(), OrcidId: null, AuthorConfidence.Low));
+        ctx.AuthorParagraphs.Add(AuthorsParagraphFactory.GetAuthorsParagraph(doc));
+
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Null(ctx.AuthorBlockEndParagraph);
+        Assert.NotNull(ctx.DoiParagraph);
     }
 
     [Fact]
@@ -362,6 +398,9 @@ public sealed class RewriteHeaderMvpRuleTests
         Assert.Equal(string.Empty, ParagraphText(paragraphs[3]));
         Assert.Equal("Author A1", ParagraphText(paragraphs[4]));
         Assert.Equal("Author B2 0000-0002-1825-0097", ParagraphText(paragraphs[5]));
+
+        Assert.Same(paragraphs[0], ctx.DoiParagraph);
+        Assert.Same(paragraphs[5], ctx.AuthorBlockEndParagraph);
 
         Assert.Empty(AuthorsParagraphFactory.GetBody(doc).Descendants<Hyperlink>());
         Assert.Empty(mainPart.HyperlinkRelationships);
