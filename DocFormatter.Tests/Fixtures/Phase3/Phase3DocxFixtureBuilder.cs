@@ -234,6 +234,20 @@ internal static class Phase3DocxFixtureBuilder
         return BuildParagraph(text, runDirectBold: true, alignment: alignment);
     }
 
+    public static Paragraph BuildSectionParagraph(
+        string text,
+        JustificationValues? alignment = null)
+    {
+        return BuildParagraph(text, runDirectBold: true, alignment: alignment);
+    }
+
+    public static Paragraph BuildSubsectionParagraph(
+        string text,
+        JustificationValues? alignment = null)
+    {
+        return BuildParagraph(text, runDirectBold: true, alignment: alignment);
+    }
+
     public static Paragraph BuildBlankParagraph() => new();
 
     private static Style BuildStyle(StyleDefinition definition)
