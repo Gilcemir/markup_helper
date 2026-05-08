@@ -14,7 +14,13 @@ internal static class Phase3DocxFixtureBuilder
         bool? ParagraphMarkBoldVal = null,
         string? BasedOn = null);
 
+    public sealed record RunSpec(
+        string Text,
+        bool Bold = false,
+        bool? BoldVal = null);
+
     public static WordprocessingDocument CreateDocument(
+        IEnumerable<OpenXmlElement>? bodyElements = null,
         IEnumerable<Paragraph>? paragraphs = null,
         IEnumerable<StyleDefinition>? styles = null,
         bool includeStylesPart = true)
@@ -22,8 +28,19 @@ internal static class Phase3DocxFixtureBuilder
         var stream = new MemoryStream();
         var doc = WordprocessingDocument.Create(stream, WordprocessingDocumentType.Document);
         var mainPart = doc.AddMainDocumentPart();
-        var bodyChildren = paragraphs?.Cast<OpenXmlElement>().ToArray() ?? [];
-        mainPart.Document = new Document(new Body(bodyChildren));
+
+        var children = new List<OpenXmlElement>();
+        if (bodyElements is not null)
+        {
+            children.AddRange(bodyElements);
+        }
+
+        if (paragraphs is not null)
+        {
+            children.AddRange(paragraphs);
+        }
+
+        mainPart.Document = new Document(new Body(children.ToArray()));
 
         if (includeStylesPart)
         {
@@ -49,11 +66,13 @@ internal static class Phase3DocxFixtureBuilder
         bool runDirectBold = false,
         bool? runDirectBoldVal = null,
         bool paragraphMarkBold = false,
-        bool? paragraphMarkBoldVal = null)
+        bool? paragraphMarkBoldVal = null,
+        JustificationValues? alignment = null)
     {
         var paragraph = new Paragraph();
 
-        if (styleId is not null || paragraphMarkBold)
+        var needsParagraphProperties = styleId is not null || paragraphMarkBold || alignment is not null;
+        if (needsParagraphProperties)
         {
             var paragraphProperties = new ParagraphProperties();
 
@@ -66,6 +85,11 @@ internal static class Phase3DocxFixtureBuilder
             {
                 paragraphProperties.AppendChild(
                     new ParagraphMarkRunProperties(BuildBold(paragraphMarkBoldVal)));
+            }
+
+            if (alignment is not null)
+            {
+                paragraphProperties.Justification = new Justification { Val = alignment.Value };
             }
 
             paragraph.ParagraphProperties = paragraphProperties;
@@ -88,6 +112,95 @@ internal static class Phase3DocxFixtureBuilder
         return paragraph;
     }
 
+    public static Paragraph BuildParagraphWithRuns(
+        IEnumerable<RunSpec> runs,
+        string? styleId = null,
+        bool paragraphMarkBold = false,
+        bool? paragraphMarkBoldVal = null,
+        JustificationValues? alignment = null)
+    {
+        ArgumentNullException.ThrowIfNull(runs);
+
+        var paragraph = new Paragraph();
+
+        var needsParagraphProperties = styleId is not null || paragraphMarkBold || alignment is not null;
+        if (needsParagraphProperties)
+        {
+            var paragraphProperties = new ParagraphProperties();
+
+            if (styleId is not null)
+            {
+                paragraphProperties.ParagraphStyleId = new ParagraphStyleId { Val = styleId };
+            }
+
+            if (paragraphMarkBold)
+            {
+                paragraphProperties.AppendChild(
+                    new ParagraphMarkRunProperties(BuildBold(paragraphMarkBoldVal)));
+            }
+
+            if (alignment is not null)
+            {
+                paragraphProperties.Justification = new Justification { Val = alignment.Value };
+            }
+
+            paragraph.ParagraphProperties = paragraphProperties;
+        }
+
+        foreach (var spec in runs)
+        {
+            Run run;
+            if (spec.Bold)
+            {
+                var runProperties = new RunProperties(BuildBold(spec.BoldVal));
+                run = new Run(
+                    runProperties,
+                    new Text(spec.Text) { Space = SpaceProcessingModeValues.Preserve });
+            }
+            else
+            {
+                run = new Run(new Text(spec.Text) { Space = SpaceProcessingModeValues.Preserve });
+            }
+
+            paragraph.AppendChild(run);
+        }
+
+        return paragraph;
+    }
+
+    public static Table WrapInTable(params Paragraph[] paragraphs)
+    {
+        ArgumentNullException.ThrowIfNull(paragraphs);
+
+        var cell = new TableCell();
+        foreach (var paragraph in paragraphs)
+        {
+            cell.AppendChild(paragraph);
+        }
+
+        var row = new TableRow(cell);
+        return new Table(row);
+    }
+
+    public static Table WrapInNestedTable(int depth, params Paragraph[] paragraphs)
+    {
+        ArgumentNullException.ThrowIfNull(paragraphs);
+        if (depth < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be at least 1.");
+        }
+
+        var inner = WrapInTable(paragraphs);
+        for (var i = 1; i < depth; i++)
+        {
+            var cell = new TableCell();
+            cell.AppendChild(inner);
+            inner = new Table(new TableRow(cell));
+        }
+
+        return inner;
+    }
+
     public static Run GetFirstRun(Paragraph paragraph)
     {
         ArgumentNullException.ThrowIfNull(paragraph);
@@ -99,6 +212,29 @@ internal static class Phase3DocxFixtureBuilder
         ArgumentNullException.ThrowIfNull(doc);
         return doc.MainDocumentPart!.Document!.Body!;
     }
+
+    public static Paragraph BuildHistoryParagraph(
+        string label,
+        string detail,
+        string separator = ":",
+        JustificationValues? alignment = null)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        ArgumentNullException.ThrowIfNull(detail);
+        ArgumentNullException.ThrowIfNull(separator);
+        return BuildParagraph(
+            $"{label}{separator} {detail}",
+            alignment: alignment);
+    }
+
+    public static Paragraph BuildIntroductionAnchorParagraph(
+        string text = "INTRODUCTION",
+        JustificationValues? alignment = null)
+    {
+        return BuildParagraph(text, runDirectBold: true, alignment: alignment);
+    }
+
+    public static Paragraph BuildBlankParagraph() => new();
 
     private static Style BuildStyle(StyleDefinition definition)
     {
