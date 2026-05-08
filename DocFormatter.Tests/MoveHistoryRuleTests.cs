@@ -62,7 +62,10 @@ public sealed class MoveHistoryRuleTests
         var info = Assert.Single(report.Entries, e => e.Level == ReportLevel.Info);
         Assert.Equal(nameof(MoveHistoryRule), info.Rule);
         Assert.StartsWith(MoveHistoryRule.MovedMessagePrefix, info.Message);
-        Assert.EndsWith($"{introIndex})", info.Message);
+        Assert.Contains(
+            $"{MoveHistoryRule.MovedMessagePrefix}{introIndex}{MoveHistoryRule.MovedMessageOriginInfix}",
+            info.Message);
+        Assert.EndsWith(")", info.Message);
         Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
     }
 
@@ -350,6 +353,8 @@ public sealed class MoveHistoryRuleTests
     [InlineData("received: 2024-01-15", "accepted: 2024-03-10", "published: 2024-04-01")]
     [InlineData("RECEIVED: 2024-01-15", "ACCEPTED: 2024-03-10", "PUBLISHED: 2024-04-01")]
     [InlineData("Received - 2024-01-15", "Accepted - 2024-03-10", "Published - 2024-04-01")]
+    [InlineData("Received – 2024-01-15", "Accepted – 2024-03-10", "Published – 2024-04-01")]
+    [InlineData("Received — 2024-01-15", "Accepted — 2024-03-10", "Published — 2024-04-01")]
     public void Apply_RegexCaseInsensitivityAndSeparators_AllVariantsMatch(
         string receivedText,
         string acceptedText,
@@ -520,7 +525,10 @@ public sealed class MoveHistoryRuleTests
         var info = Assert.Single(report.Entries, e => e.Level == ReportLevel.Info);
         Assert.Equal(nameof(MoveHistoryRule), info.Rule);
         Assert.StartsWith(MoveHistoryRule.MovedMessagePrefix, info.Message);
-        Assert.EndsWith($"{introIndex})", info.Message);
+        Assert.Contains(
+            $"{MoveHistoryRule.MovedMessagePrefix}{introIndex}{MoveHistoryRule.MovedMessageOriginInfix}",
+            info.Message);
+        Assert.EndsWith(")", info.Message);
         Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
     }
 }

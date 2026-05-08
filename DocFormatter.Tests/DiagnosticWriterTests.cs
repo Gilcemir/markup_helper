@@ -561,7 +561,7 @@ public sealed class DiagnosticWriterTests : IDisposable
         var report = new Report();
         report.Info(
             nameof(MoveHistoryRule),
-            $"{MoveHistoryRule.MovedMessagePrefix}13)");
+            $"{MoveHistoryRule.MovedMessagePrefix}13{MoveHistoryRule.MovedMessageOriginInfix}5)");
         var ctx = new FormattingContext();
 
         var doc = DiagnosticWriter.Build("phase3-moved.docx", ctx, report, DateTime.UtcNow);
@@ -574,11 +574,11 @@ public sealed class DiagnosticWriterTests : IDisposable
         Assert.True(move.AnchorFound);
         Assert.Equal(3, move.ParagraphsMoved);
         Assert.Equal(13, move.ToIndexBeforeIntro);
-        Assert.Null(move.FromIndex);
+        Assert.Equal(5, move.FromIndex);
     }
 
     [Fact]
-    public void Build_HistoryMove_AlreadyAdjacentInfo_AppliedTrueParagraphsZero()
+    public void Build_HistoryMove_AlreadyAdjacentInfo_AppliedTrueParagraphsThree()
     {
         var report = new Report();
         report.Info(nameof(MoveHistoryRule), MoveHistoryRule.AlreadyAdjacentMessage);
@@ -592,7 +592,7 @@ public sealed class DiagnosticWriterTests : IDisposable
         Assert.True(move!.Applied);
         Assert.Null(move.SkippedReason);
         Assert.True(move.AnchorFound);
-        Assert.Equal(0, move.ParagraphsMoved);
+        Assert.Equal(3, move.ParagraphsMoved);
         Assert.Null(move.ToIndexBeforeIntro);
     }
 
@@ -771,13 +771,16 @@ public sealed class DiagnosticWriterTests : IDisposable
         var report = new Report();
         report.Info(
             nameof(MoveHistoryRule),
-            $"{MoveHistoryRule.MovedMessagePrefix}13)");
+            $"{MoveHistoryRule.MovedMessagePrefix}13{MoveHistoryRule.MovedMessageOriginInfix}5)");
         report.Info(
             nameof(PromoteSectionsRule),
             $"{PromoteSectionsRule.AnchorPositionMessagePrefix}13");
         report.Info(
             nameof(PromoteSectionsRule),
             $"{PromoteSectionsRule.SummaryPromotedPrefix}5{PromoteSectionsRule.SummarySectionsInfix}2{PromoteSectionsRule.SummarySubsectionsSuffix}");
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.SkipCountsMessagePrefix}3{PromoteSectionsRule.SkipCountsInTablesInfix}13{PromoteSectionsRule.SkipCountsBeforeAnchorSuffix}");
         report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
         var ctx = new FormattingContext();
 
@@ -787,10 +790,13 @@ public sealed class DiagnosticWriterTests : IDisposable
         Assert.NotNull(doc.Formatting!.HistoryMove);
         Assert.True(doc.Formatting.HistoryMove!.Applied);
         Assert.Equal(13, doc.Formatting.HistoryMove.ToIndexBeforeIntro);
+        Assert.Equal(5, doc.Formatting.HistoryMove.FromIndex);
         Assert.NotNull(doc.Formatting.SectionPromotion);
         Assert.True(doc.Formatting.SectionPromotion!.Applied);
         Assert.Equal(5, doc.Formatting.SectionPromotion.SectionsPromoted);
         Assert.Equal(2, doc.Formatting.SectionPromotion.SubsectionsPromoted);
+        Assert.Equal(3, doc.Formatting.SectionPromotion.SkippedParagraphsInsideTables);
+        Assert.Equal(13, doc.Formatting.SectionPromotion.SkippedParagraphsBeforeAnchor);
     }
 
     [Fact]
@@ -822,7 +828,9 @@ public sealed class DiagnosticWriterTests : IDisposable
         report.Info(nameof(RewriteAbstractRule), RewriteAbstractRule.StructuralItalicRemovedMessage);
         report.Warn(nameof(ExtractCorrespondingAuthorRule), ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage);
         // Phase 3 (one INFO, one WARN equivalent path)
-        report.Info(nameof(MoveHistoryRule), $"{MoveHistoryRule.MovedMessagePrefix}11)");
+        report.Info(
+            nameof(MoveHistoryRule),
+            $"{MoveHistoryRule.MovedMessagePrefix}11{MoveHistoryRule.MovedMessageOriginInfix}4)");
         report.Warn(nameof(PromoteSectionsRule), PromoteSectionsRule.AnchorMissingMessage);
         var ctx = new FormattingContext { Doi = "10.1/x", ElocationId = "e1", ArticleTitle = "T" };
 
@@ -855,13 +863,16 @@ public sealed class DiagnosticWriterTests : IDisposable
         var report = new Report();
         report.Info(
             nameof(MoveHistoryRule),
-            $"{MoveHistoryRule.MovedMessagePrefix}9)");
+            $"{MoveHistoryRule.MovedMessagePrefix}9{MoveHistoryRule.MovedMessageOriginInfix}3)");
         report.Info(
             nameof(PromoteSectionsRule),
             $"{PromoteSectionsRule.AnchorPositionMessagePrefix}9");
         report.Info(
             nameof(PromoteSectionsRule),
             $"{PromoteSectionsRule.SummaryPromotedPrefix}4{PromoteSectionsRule.SummarySectionsInfix}1{PromoteSectionsRule.SummarySubsectionsSuffix}");
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.SkipCountsMessagePrefix}0{PromoteSectionsRule.SkipCountsInTablesInfix}9{PromoteSectionsRule.SkipCountsBeforeAnchorSuffix}");
         report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
         var ctx = new FormattingContext { Doi = "10.1/x", ElocationId = "e1", ArticleTitle = "T" };
 

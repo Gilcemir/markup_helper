@@ -454,7 +454,7 @@ public sealed class PromoteSectionsRuleTests
         Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
 
         var infos = report.Entries.Where(e => e.Level == ReportLevel.Info).ToList();
-        Assert.Equal(2, infos.Count);
+        Assert.Equal(3, infos.Count);
         Assert.All(infos, e => Assert.Equal(nameof(PromoteSectionsRule), e.Rule));
 
         var anchorPositionEntry = Assert.Single(
@@ -469,6 +469,14 @@ public sealed class PromoteSectionsRuleTests
         var expectedSummary =
             $"{PromoteSectionsRule.SummaryPromotedPrefix}4{PromoteSectionsRule.SummarySectionsInfix}2{PromoteSectionsRule.SummarySubsectionsSuffix}";
         Assert.Equal(expectedSummary, summaryEntry.Message);
+
+        var skipCountsEntry = Assert.Single(
+            infos,
+            e => e.Message.StartsWith(PromoteSectionsRule.SkipCountsMessagePrefix, StringComparison.Ordinal));
+        // No tables in fixture; anchor at body position 1 means 1 paragraph (keywords) before anchor.
+        var expectedSkipCounts =
+            $"{PromoteSectionsRule.SkipCountsMessagePrefix}0{PromoteSectionsRule.SkipCountsInTablesInfix}1{PromoteSectionsRule.SkipCountsBeforeAnchorSuffix}";
+        Assert.Equal(expectedSkipCounts, skipCountsEntry.Message);
     }
 
     [Fact]

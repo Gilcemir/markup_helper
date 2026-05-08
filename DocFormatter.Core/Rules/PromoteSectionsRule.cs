@@ -17,6 +17,12 @@ public sealed class PromoteSectionsRule : IFormattingRule
 
     public const string SummarySubsectionsSuffix = " sub-sections (14pt center)";
 
+    public const string SkipCountsMessagePrefix = "skipped ";
+
+    public const string SkipCountsInTablesInfix = " paragraphs inside tables and ";
+
+    public const string SkipCountsBeforeAnchorSuffix = " paragraphs before anchor";
+
     private const string SectionFontSizeHalfPoints = "32";
 
     private const string SubsectionFontSizeHalfPoints = "28";
@@ -45,11 +51,12 @@ public sealed class PromoteSectionsRule : IFormattingRule
             return;
         }
 
-        var anchorBodyIndex = body.Elements<Paragraph>().ToList().IndexOf(anchor);
-        report.Info(Name, $"{AnchorPositionMessagePrefix}{anchorBodyIndex}");
-
-        var allParagraphs = body.Descendants<Paragraph>().ToList();
+        var allParagraphs = body.Elements<Paragraph>().ToList();
         var anchorIndex = allParagraphs.IndexOf(anchor);
+        report.Info(Name, $"{AnchorPositionMessagePrefix}{anchorIndex}");
+
+        var skippedInTables = CountParagraphsInsideTables(body);
+        var skippedBeforeAnchor = anchorIndex;
 
         var sectionsPromoted = 0;
         var subsectionsPromoted = 0;
@@ -82,6 +89,23 @@ public sealed class PromoteSectionsRule : IFormattingRule
         report.Info(
             Name,
             $"{SummaryPromotedPrefix}{sectionsPromoted}{SummarySectionsInfix}{subsectionsPromoted}{SummarySubsectionsSuffix}");
+        report.Info(
+            Name,
+            $"{SkipCountsMessagePrefix}{skippedInTables}{SkipCountsInTablesInfix}{skippedBeforeAnchor}{SkipCountsBeforeAnchorSuffix}");
+    }
+
+    private static int CountParagraphsInsideTables(Body body)
+    {
+        var count = 0;
+        foreach (var paragraph in body.Descendants<Paragraph>())
+        {
+            if (BodySectionDetector.IsInsideTable(paragraph))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static bool IsContextSkipParagraph(Paragraph paragraph, FormattingContext ctx)

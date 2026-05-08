@@ -16,6 +16,8 @@ public sealed class MoveHistoryRule : IFormattingRule
     public const string MovedMessagePrefix =
         "history moved (3 paragraphs placed before INTRODUCTION at position ";
 
+    public const string MovedMessageOriginInfix = " from index ";
+
     public const string PartialBlockMessagePrefix = "history partial: ";
 
     public const string OutOfOrderMessagePrefix = "history out of order ";
@@ -25,7 +27,7 @@ public sealed class MoveHistoryRule : IFormattingRule
     public const string NotFoundMessage = "history block not found — nothing to move";
 
     private static readonly Regex HistoryMarkerRegex = new(
-        @"^(received|accepted|published)\s*[:\-]\s*.+",
+        @"^(received|accepted|published)\s*[:\-–—]\s*.+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public string Name => nameof(MoveHistoryRule);
@@ -112,12 +114,11 @@ public sealed class MoveHistoryRule : IFormattingRule
 
         if (accepted is null || published is null)
         {
-            var rFlag = received is not null ? 1 : 0;
             var aFlag = accepted is not null ? 1 : 0;
             var pFlag = published is not null ? 1 : 0;
             report.Warn(
                 Name,
-                $"{PartialBlockMessagePrefix}Received={rFlag} Accepted={aFlag} Published={pFlag} — not moved");
+                $"{PartialBlockMessagePrefix}Received=1 Accepted={aFlag} Published={pFlag} — not moved");
             return;
         }
 
@@ -154,7 +155,9 @@ public sealed class MoveHistoryRule : IFormattingRule
         body.InsertBefore(published, anchor);
 
         var finalAnchorIndex = body.Elements<Paragraph>().ToList().IndexOf(anchor);
-        report.Info(Name, $"{MovedMessagePrefix}{finalAnchorIndex})");
+        report.Info(
+            Name,
+            $"{MovedMessagePrefix}{finalAnchorIndex}{MovedMessageOriginInfix}{receivedIndex})");
     }
 
     private static string DescribeMarkerOrder(int receivedIndex, int acceptedIndex, int publishedIndex)

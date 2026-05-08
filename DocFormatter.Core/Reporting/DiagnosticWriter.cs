@@ -214,9 +214,8 @@ public static class DiagnosticWriter
     }
 
     // Reconstructs the Phase 3 history-move diagnostic from MoveHistoryRule's report entries.
-    // FromIndex stays null because the rule does not currently emit the original receivedIndex
-    // in its message text; ToIndexBeforeIntro is parsed from the trailing position number in
-    // MovedMessagePrefix. ParagraphsMoved follows ADR-002 (always 3 on success, 0 otherwise).
+    // ToIndexBeforeIntro and FromIndex are parsed from MovedMessagePrefix when the move applied;
+    // ParagraphsMoved follows ADR-002 (always 3 on success or already-adjacent, 0 otherwise).
     private static DiagnosticHistoryMove? BuildHistoryMove(IReadOnlyList<ReportEntry> entries)
     {
         if (entries.Count == 0)
@@ -274,17 +273,14 @@ public static class DiagnosticWriter
             }
             else if (entry.Level == ReportLevel.Info)
             {
-                if (entry.Message.StartsWith(MoveHistoryRule.MovedMessagePrefix, StringComparison.Ordinal))
+                if (entry.Message.StartsWith(MoveHistoryRule.MovedMessagePrefix, StringComparison.Ordinal)
+                    && TryParseMovedIndices(entry.Message, out var toIndex, out var fromIndex))
                 {
-                    var toIndex = ParseTrailingInteger(
-                        entry.Message,
-                        MoveHistoryRule.MovedMessagePrefix.Length,
-                        trailingChar: ')');
                     return new DiagnosticHistoryMove(
                         Applied: true,
                         SkippedReason: null,
                         AnchorFound: true,
-                        FromIndex: null,
+                        FromIndex: fromIndex,
                         ToIndexBeforeIntro: toIndex,
                         ParagraphsMoved: 3);
                 }
@@ -297,7 +293,7 @@ public static class DiagnosticWriter
                         AnchorFound: true,
                         FromIndex: null,
                         ToIndexBeforeIntro: null,
-                        ParagraphsMoved: 0);
+                        ParagraphsMoved: 3);
                 }
 
                 if (string.Equals(entry.Message, MoveHistoryRule.NotFoundMessage, StringComparison.Ordinal))
@@ -316,16 +312,56 @@ public static class DiagnosticWriter
         return new DiagnosticHistoryMove(
             Applied: false,
             SkippedReason: "unknown",
-            AnchorFound: false,
+            AnchorFound: true,
             FromIndex: null,
             ToIndexBeforeIntro: null,
             ParagraphsMoved: 0);
     }
 
+    private static bool TryParseMovedIndices(string message, out int? toIndex, out int? fromIndex)
+    {
+        toIndex = null;
+        fromIndex = null;
+
+        var prefix = MoveHistoryRule.MovedMessagePrefix;
+        var infix = MoveHistoryRule.MovedMessageOriginInfix;
+        if (!message.StartsWith(prefix, StringComparison.Ordinal)
+            || !message.EndsWith(")", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var infixStart = message.IndexOf(infix, prefix.Length, StringComparison.Ordinal);
+        if (infixStart < 0)
+        {
+            return false;
+        }
+
+        var toToken = message.AsSpan(prefix.Length, infixStart - prefix.Length);
+        var fromTokenStart = infixStart + infix.Length;
+        var fromTokenLength = message.Length - 1 - fromTokenStart;
+        if (fromTokenLength <= 0)
+        {
+            return false;
+        }
+
+        var fromToken = message.AsSpan(fromTokenStart, fromTokenLength);
+        if (int.TryParse(toToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out var toValue))
+        {
+            toIndex = toValue;
+        }
+
+        if (int.TryParse(fromToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fromValue))
+        {
+            fromIndex = fromValue;
+        }
+
+        return toIndex.HasValue;
+    }
+
     // Reconstructs the Phase 3 section-promotion diagnostic from PromoteSectionsRule's entries.
-    // The rule emits two INFO messages on success (anchor position + summary counts) and a single
-    // WARN on anchor_missing. SkippedParagraphsInsideTables / SkippedParagraphsBeforeAnchor are
-    // not currently emitted by the rule and stay at zero (see task_06 memory for the gap).
+    // The rule emits three INFO messages on success (anchor position, promotion summary, skip
+    // counts) and a single WARN on anchor_missing.
     private static DiagnosticSectionPromotion? BuildSectionPromotion(IReadOnlyList<ReportEntry> entries)
     {
         if (entries.Count == 0)
@@ -336,6 +372,8 @@ public static class DiagnosticWriter
         int? anchorParagraphIndex = null;
         var sectionsPromoted = 0;
         var subsectionsPromoted = 0;
+        var skippedInsideTables = 0;
+        var skippedBeforeAnchor = 0;
         var hasSummary = false;
 
         foreach (var entry in entries)
@@ -372,6 +410,12 @@ public static class DiagnosticWriter
                 subsectionsPromoted = subsections;
                 hasSummary = true;
             }
+            else if (entry.Message.StartsWith(PromoteSectionsRule.SkipCountsMessagePrefix, StringComparison.Ordinal)
+                && TryParseSkipCounts(entry.Message, out var inTables, out var beforeAnchor))
+            {
+                skippedInsideTables = inTables;
+                skippedBeforeAnchor = beforeAnchor;
+            }
         }
 
         if (!hasSummary && anchorParagraphIndex is null)
@@ -379,7 +423,7 @@ public static class DiagnosticWriter
             return new DiagnosticSectionPromotion(
                 Applied: false,
                 SkippedReason: "unknown",
-                AnchorFound: false,
+                AnchorFound: true,
                 AnchorParagraphIndex: null,
                 SectionsPromoted: 0,
                 SubsectionsPromoted: 0,
@@ -394,8 +438,51 @@ public static class DiagnosticWriter
             AnchorParagraphIndex: anchorParagraphIndex,
             SectionsPromoted: sectionsPromoted,
             SubsectionsPromoted: subsectionsPromoted,
-            SkippedParagraphsInsideTables: 0,
-            SkippedParagraphsBeforeAnchor: 0);
+            SkippedParagraphsInsideTables: skippedInsideTables,
+            SkippedParagraphsBeforeAnchor: skippedBeforeAnchor);
+    }
+
+    private static bool TryParseSkipCounts(string message, out int inTables, out int beforeAnchor)
+    {
+        inTables = 0;
+        beforeAnchor = 0;
+
+        var prefix = PromoteSectionsRule.SkipCountsMessagePrefix;
+        var infix = PromoteSectionsRule.SkipCountsInTablesInfix;
+        var suffix = PromoteSectionsRule.SkipCountsBeforeAnchorSuffix;
+
+        if (!message.StartsWith(prefix, StringComparison.Ordinal)
+            || !message.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var infixStart = message.IndexOf(infix, prefix.Length, StringComparison.Ordinal);
+        if (infixStart < 0)
+        {
+            return false;
+        }
+
+        var suffixStart = message.Length - suffix.Length;
+        if (infixStart + infix.Length > suffixStart)
+        {
+            return false;
+        }
+
+        var inTablesToken = message.AsSpan(prefix.Length, infixStart - prefix.Length);
+        var beforeAnchorToken = message.AsSpan(infixStart + infix.Length, suffixStart - (infixStart + infix.Length));
+
+        if (!int.TryParse(inTablesToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out inTables))
+        {
+            return false;
+        }
+
+        if (!int.TryParse(beforeAnchorToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out beforeAnchor))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static int? ParseTrailingInteger(string message, int startIndex, char? trailingChar = null)
