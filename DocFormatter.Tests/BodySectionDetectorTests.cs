@@ -64,8 +64,10 @@ public sealed class BodySectionDetectorTests
     }
 
     [Fact]
-    public void IsBoldEffective_ParagraphMarkBold_ReturnsTrue()
+    public void IsBoldEffective_ParagraphMarkBoldButRunNotBold_ReturnsFalse()
     {
+        // pPr/rPr/b formats only the paragraph mark (the pilcrow); Word does not
+        // cascade it to runs without their own <w:b/>. Detection must mirror that.
         var paragraph = Phase3DocxFixtureBuilder.BuildParagraph(
             "hello",
             paragraphMarkBold: true);
@@ -73,11 +75,11 @@ public sealed class BodySectionDetectorTests
 
         var run = Phase3DocxFixtureBuilder.GetFirstRun(paragraph);
 
-        Assert.True(BodySectionDetector.IsBoldEffective(run, paragraph, doc.MainDocumentPart));
+        Assert.False(BodySectionDetector.IsBoldEffective(run, paragraph, doc.MainDocumentPart));
     }
 
     [Fact]
-    public void IsBoldEffective_ParagraphMarkBoldValFalse_ReturnsFalse()
+    public void IsBoldEffective_ParagraphMarkBoldValFalseAndRunNotBold_ReturnsFalse()
     {
         var paragraph = Phase3DocxFixtureBuilder.BuildParagraph(
             "hello",
@@ -88,6 +90,20 @@ public sealed class BodySectionDetectorTests
         var run = Phase3DocxFixtureBuilder.GetFirstRun(paragraph);
 
         Assert.False(BodySectionDetector.IsBoldEffective(run, paragraph, doc.MainDocumentPart));
+    }
+
+    [Fact]
+    public void IsSubsection_ParagraphMarkBoldButRunsNotBold_ReturnsFalse()
+    {
+        // Regression: prior versions treated pPr/rPr/b as if it cascaded to runs,
+        // wrongly classifying body paragraphs/references as sub-sections.
+        var paragraph = Phase3DocxFixtureBuilder.BuildParagraph(
+            "Although participatory plant breeding has been successfully applied",
+            paragraphMarkBold: true,
+            alignment: JustificationValues.Both);
+        using var doc = Phase3DocxFixtureBuilder.CreateDocument(paragraphs: new[] { paragraph });
+
+        Assert.False(BodySectionDetector.IsSubsection(paragraph, doc.MainDocumentPart));
     }
 
     [Fact]

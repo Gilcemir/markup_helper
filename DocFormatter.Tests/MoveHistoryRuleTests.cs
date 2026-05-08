@@ -70,6 +70,42 @@ public sealed class MoveHistoryRuleTests
     }
 
     [Fact]
+    public void Apply_ApprovedSynonymForAccepted_MovesAndPreservesOriginalLabel()
+    {
+        var keywords = Phase3DocxFixtureBuilder.BuildParagraph("Keywords: maize, breeding");
+        var received = Phase3DocxFixtureBuilder.BuildHistoryParagraph("Received", "2026-02-10");
+        var approved = Phase3DocxFixtureBuilder.BuildHistoryParagraph("Approved", "2026-04-16");
+        var published = Phase3DocxFixtureBuilder.BuildHistoryParagraph("Published", "2026-04-23");
+        var betweenA = Phase3DocxFixtureBuilder.BuildParagraph("Between A");
+        var intro = Phase3DocxFixtureBuilder.BuildIntroductionAnchorParagraph();
+
+        using var doc = Phase3DocxFixtureBuilder.CreateDocument(paragraphs: new[]
+        {
+            keywords, received, approved, published, betweenA, intro,
+        });
+
+        var beforeTexts = CollectBodyTexts(doc);
+        var report = new Report();
+
+        CreateRule().Apply(doc, new FormattingContext(), report);
+
+        Assert.Equal(beforeTexts, CollectBodyTexts(doc));
+
+        var paragraphs = Paragraphs(doc);
+        var introIndex = paragraphs.IndexOf(intro);
+        Assert.Same(received, paragraphs[introIndex - 3]);
+        Assert.Same(approved, paragraphs[introIndex - 2]);
+        Assert.Same(published, paragraphs[introIndex - 1]);
+
+        var approvedText = string.Concat(approved.Descendants<Text>().Select(t => t.Text));
+        Assert.StartsWith("Approved", approvedText);
+
+        var info = Assert.Single(report.Entries, e => e.Level == ReportLevel.Info);
+        Assert.StartsWith(MoveHistoryRule.MovedMessagePrefix, info.Message);
+        Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
+    }
+
+    [Fact]
     public void Apply_RunTwice_IsIdempotentAndEmitsAlreadyAdjacentOnSecondRun()
     {
         var keywords = Phase3DocxFixtureBuilder.BuildParagraph("Keywords: maize, breeding");

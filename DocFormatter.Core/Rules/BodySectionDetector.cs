@@ -78,13 +78,9 @@ internal static class BodySectionDetector
             return ResolveBold(runBold);
         }
 
-        var paragraphMarkBold = paragraph.ParagraphProperties?
-            .GetFirstChild<ParagraphMarkRunProperties>()?
-            .GetFirstChild<Bold>();
-        if (paragraphMarkBold is not null)
-        {
-            return ResolveBold(paragraphMarkBold);
-        }
+        // Note: <w:pPr><w:rPr><w:b/></w:rPr></w:pPr> formats only the paragraph mark
+        // (the pilcrow), not the runs. Word does not cascade it to runs without their
+        // own <w:b/>, so we don't treat it as a fallback for run-level bold either.
 
         var styleId = paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
         if (string.IsNullOrEmpty(styleId))

@@ -27,7 +27,7 @@ public sealed class MoveHistoryRule : IFormattingRule
     public const string NotFoundMessage = "history block not found — nothing to move";
 
     private static readonly Regex HistoryMarkerRegex = new(
-        @"^(received|accepted|published)\s*[:\-–—]\s*.+",
+        @"^(received|accepted|approved|published)\s*[:\-–—]\s*.+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public string Name => nameof(MoveHistoryRule);
@@ -90,6 +90,7 @@ public sealed class MoveHistoryRule : IFormattingRule
                     }
                     break;
                 case "accepted":
+                case "approved":
                     if (accepted is null)
                     {
                         accepted = current;
