@@ -51,7 +51,9 @@ public sealed record DiagnosticFormatting(
     DiagnosticAlignment? AlignmentApplied,
     DiagnosticAbstract? AbstractFormatted,
     bool? AuthorBlockSpacingApplied,
-    DiagnosticCorrespondingEmail? CorrespondingEmail);
+    DiagnosticCorrespondingEmail? CorrespondingEmail,
+    DiagnosticHistoryMove? HistoryMove,
+    DiagnosticSectionPromotion? SectionPromotion);
 
 public sealed record DiagnosticAlignment(bool Doi, bool Section, bool Title);
 
@@ -61,6 +63,24 @@ public sealed record DiagnosticAbstract(
     bool InternalItalicPreserved);
 
 public sealed record DiagnosticCorrespondingEmail(string? Value, string? Reason);
+
+public sealed record DiagnosticHistoryMove(
+    bool Applied,
+    string? SkippedReason,
+    bool AnchorFound,
+    int? FromIndex,
+    int? ToIndexBeforeIntro,
+    int ParagraphsMoved);
+
+public sealed record DiagnosticSectionPromotion(
+    bool Applied,
+    string? SkippedReason,
+    bool AnchorFound,
+    int? AnchorParagraphIndex,
+    int SectionsPromoted,
+    int SubsectionsPromoted,
+    int SkippedParagraphsInsideTables,
+    int SkippedParagraphsBeforeAnchor);
 
 public sealed record DiagnosticFields(
     DiagnosticField Doi,

@@ -108,7 +108,9 @@ public static class DiagnosticWriter
             AlignmentApplied: BuildAlignment(alignment),
             AbstractFormatted: BuildAbstract(abs),
             AuthorBlockSpacingApplied: BuildSpacingApplied(spacing),
-            CorrespondingEmail: BuildCorrespondingEmail(email));
+            CorrespondingEmail: BuildCorrespondingEmail(email),
+            HistoryMove: null,
+            SectionPromotion: null);
     }
 
     private static List<ReportEntry> FilterByRule(IReport report, string rule)
