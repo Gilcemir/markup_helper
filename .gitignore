@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # DocFormatter examples (real customer documents — never commit)
 examples/
+
+# Claude Code runtime state
+.claude/scheduled_tasks.lock
