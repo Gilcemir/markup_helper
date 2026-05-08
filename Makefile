@@ -10,20 +10,21 @@ MAC_BIN     := $(MAC_PUBLISH)/docformatter
 
 FILE ?= $(DEFAULT_FILE)
 
-.PHONY: help build test test-watch run run-all publish-mac publish-win clean format logs
+.PHONY: help build test test-watch run run-all publish-mac publish-win release clean format logs
 
 help:
 	@echo "Targets:"
-	@echo "  build         dotnet build (Debug)"
-	@echo "  test          dotnet test (solution)"
-	@echo "  test-watch    dotnet watch test"
-	@echo "  run           run CLI on FILE=<path> (default: $(DEFAULT_FILE))"
-	@echo "  run-all       run CLI in batch mode on $(EXAMPLES)/"
-	@echo "  publish-mac   self-contained osx-arm64 binary -> $(MAC_BIN)"
-	@echo "  publish-win   delegate to $(CLI_PROJECT)/publish.sh"
-	@echo "  format        dotnet format"
-	@echo "  logs          tail latest formatted/_app.log under $(EXAMPLES)/"
-	@echo "  clean         remove bin/, obj/, and $(EXAMPLES)/**/formatted/"
+	@echo "  build              dotnet build (Debug)"
+	@echo "  test               dotnet test (solution)"
+	@echo "  test-watch         dotnet watch test"
+	@echo "  run                run CLI on FILE=<path> (default: $(DEFAULT_FILE))"
+	@echo "  run-all            run CLI in batch mode on $(EXAMPLES)/"
+	@echo "  publish-mac        self-contained osx-arm64 binary -> $(MAC_BIN)"
+	@echo "  publish-win        delegate to $(CLI_PROJECT)/publish.sh"
+	@echo "  release VERSION=vX.Y.Z   tag and push, triggering the CI release workflow"
+	@echo "  format             dotnet format"
+	@echo "  logs               tail latest formatted/_app.log under $(EXAMPLES)/"
+	@echo "  clean              remove bin/, obj/, and $(EXAMPLES)/**/formatted/"
 
 build:
 	dotnet build $(SOLUTION)
@@ -52,6 +53,30 @@ publish-mac:
 
 publish-win:
 	./$(CLI_PROJECT)/publish.sh
+
+release:
+	@if [[ -z "$${VERSION:-}" ]]; then \
+		echo "Usage: make release VERSION=vX.Y.Z" >&2; exit 1; \
+	fi
+	@if [[ ! "$${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$$ ]]; then \
+		echo "VERSION must be vMAJOR.MINOR.PATCH (got '$${VERSION}')" >&2; exit 1; \
+	fi
+	@if [[ -n "$$(git status --porcelain)" ]]; then \
+		echo "Working tree is not clean. Commit or stash first." >&2; exit 1; \
+	fi
+	@if git rev-parse "$${VERSION}" >/dev/null 2>&1; then \
+		echo "Tag $${VERSION} already exists." >&2; exit 1; \
+	fi
+	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
+	if [[ "$${branch}" != "main" ]]; then \
+		echo "Refusing to release from branch '$${branch}' (must be main)." >&2; exit 1; \
+	fi
+	git tag -a "$${VERSION}" -m "Release $${VERSION}"
+	git push origin "$${VERSION}"
+	@echo ""
+	@echo "Tag $${VERSION} pushed."
+	@echo "CI: https://github.com/Gilcemir/markup_helper/actions"
+	@echo "Release will appear at: https://github.com/Gilcemir/markup_helper/releases/tag/$${VERSION}"
 
 format:
 	dotnet format $(SOLUTION)

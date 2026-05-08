@@ -2,12 +2,24 @@
 # Builds the self-contained Windows x64 single-file executable from any host OS.
 # The flag set is locked by ADR-005 — do not edit without revising the ADR.
 # PublishTrimmed=false is mandatory because DocumentFormat.OpenXml uses reflection.
+#
+# Optional env vars (used by CI on tag builds):
+#   VERSION        numeric semver, injected as AssemblyVersion/FileVersion (e.g. 0.2.0)
+#   INFORMATIONAL  display string surfaced by `docformatter --version` (e.g. 0.2.0+abc1234)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOLUTION_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${SOLUTION_DIR}"
+
+VERSION_ARGS=()
+if [[ -n "${VERSION:-}" ]]; then
+    VERSION_ARGS+=("-p:Version=${VERSION}")
+fi
+if [[ -n "${INFORMATIONAL:-}" ]]; then
+    VERSION_ARGS+=("-p:InformationalVersion=${INFORMATIONAL}")
+fi
 
 dotnet publish DocFormatter.Cli \
     -c Release \
@@ -16,7 +28,8 @@ dotnet publish DocFormatter.Cli \
     -p:PublishSingleFile=true \
     -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:PublishReadyToRun=true \
-    -p:PublishTrimmed=false
+    -p:PublishTrimmed=false \
+    "${VERSION_ARGS[@]}"
 
 ARTIFACT="${SOLUTION_DIR}/DocFormatter.Cli/bin/Release/net10.0/win-x64/publish/docformatter.exe"
 
