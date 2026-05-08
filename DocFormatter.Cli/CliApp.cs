@@ -212,6 +212,8 @@ internal static class CliApp
         services.AddTransient<IFormattingRule, EnsureAuthorBlockSpacingRule>();
         services.AddTransient<IFormattingRule, RewriteAbstractRule>();
         services.AddTransient<IFormattingRule, LocateAbstractAndInsertElocationRule>();
+        services.AddTransient<IFormattingRule, MoveHistoryRule>();
+        services.AddTransient<IFormattingRule, PromoteSectionsRule>();
 
         services.AddTransient<FormattingPipeline>();
 

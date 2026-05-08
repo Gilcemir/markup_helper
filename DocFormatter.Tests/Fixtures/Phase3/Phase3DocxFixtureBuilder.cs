@@ -1,3 +1,4 @@
+using DocFormatter.Tests.Fixtures.Phase2;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -6,6 +7,69 @@ namespace DocFormatter.Tests.Fixtures.Phase3;
 
 internal static class Phase3DocxFixtureBuilder
 {
+    public const string KeywordsText = "Keywords: maize, breeding";
+    public const string ReceivedText = "Received: 2024-01-15";
+    public const string AcceptedText = "Accepted: 2024-03-10";
+    public const string PublishedText = "Published: 2024-04-01";
+    public const string BetweenHistoryAndIntroText = "Spacer paragraph between history and intro";
+    public const string IntroductionText = "INTRODUCTION";
+    public const string IntroductionBodyText = "Introduction body content goes here.";
+    public const string SectionMaterialText = "MATERIAL AND METHODS";
+    public const string MaterialBodyText = "Plant samples were collected from a single field.";
+    public const string SubsectionDnaText = "DNA extraction and sequencing";
+    public const string DnaBodyText = "DNA was extracted with the standard protocol.";
+    public const string SectionResultsText = "RESULTS";
+    public const string ResultsBodyText = "Yields differed by genotype.";
+    public const string TableNestedText = "TABLE 1. SAMPLE DATA";
+
+    public static void WritePhase123HappyPathDocx(string path)
+        => WriteFullPipelineFixture(path, includeIntroductionAnchor: true);
+
+    public static void WritePhase123AnchorMissingDocx(string path)
+        => WriteFullPipelineFixture(path, includeIntroductionAnchor: false);
+
+    private static void WriteFullPipelineFixture(string path, bool includeIntroductionAnchor)
+    {
+        using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
+        var mainPart = doc.AddMainDocumentPart();
+        // MalformedEmail triggers a Phase-1+2 warning (ExtractCorrespondingAuthorRule), which
+        // is what causes the diagnostic JSON to be written end-to-end. Phase 3 INFO-only
+        // signals do not trigger the JSON file by themselves.
+        var prologue = Phase2DocxFixtureBuilder.BuildPrologueElements(
+            new Phase2DocxFixtureBuilder.Phase2Options(
+                IncludeCorrespondingMarker: true,
+                MalformedEmail: true));
+        prologue.AddRange(BuildPhase3BodyElements(includeIntroductionAnchor));
+        mainPart.Document = new Document(new Body(prologue));
+    }
+
+    private static List<OpenXmlElement> BuildPhase3BodyElements(bool includeIntroductionAnchor)
+    {
+        var elements = new List<OpenXmlElement>
+        {
+            BuildParagraph(KeywordsText),
+            BuildHistoryParagraph("Received", "2024-01-15"),
+            BuildHistoryParagraph("Accepted", "2024-03-10"),
+            BuildHistoryParagraph("Published", "2024-04-01"),
+            BuildParagraph(BetweenHistoryAndIntroText),
+        };
+
+        if (includeIntroductionAnchor)
+        {
+            elements.Add(BuildIntroductionAnchorParagraph(IntroductionText));
+        }
+
+        elements.Add(BuildParagraph(IntroductionBodyText));
+        elements.Add(BuildSectionParagraph(SectionMaterialText));
+        elements.Add(BuildParagraph(MaterialBodyText));
+        elements.Add(BuildSubsectionParagraph(SubsectionDnaText));
+        elements.Add(BuildParagraph(DnaBodyText));
+        elements.Add(BuildSectionParagraph(SectionResultsText));
+        elements.Add(BuildParagraph(ResultsBodyText));
+        elements.Add(WrapInTable(BuildSectionParagraph(TableNestedText)));
+        return elements;
+    }
+
     public sealed record StyleDefinition(
         string StyleId,
         bool RunPropertiesBold = false,

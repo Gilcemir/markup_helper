@@ -5,6 +5,7 @@ using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Reporting;
 using DocFormatter.Core.Rules;
 using DocFormatter.Tests.Fixtures.Phase2;
+using DocFormatter.Tests.Fixtures.Phase3;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -270,6 +271,8 @@ public sealed class CliIntegrationTests : IDisposable
                 typeof(EnsureAuthorBlockSpacingRule),
                 typeof(RewriteAbstractRule),
                 typeof(LocateAbstractAndInsertElocationRule),
+                typeof(MoveHistoryRule),
+                typeof(PromoteSectionsRule),
             },
             rules);
     }
@@ -394,6 +397,202 @@ public sealed class CliIntegrationTests : IDisposable
             doc.Formatting.CorrespondingEmail.Reason);
     }
 
+    [Fact]
+    public void Run_Phase3_HappyPath_MovesHistoryAndPromotesSectionsEndToEnd()
+    {
+        var sourcePath = Path.Combine(_tempDir, "phase3-happy.docx");
+        Phase3DocxFixtureBuilder.WritePhase123HappyPathDocx(sourcePath);
+        var inputTexts = CollectNonEmptyBodyTexts(sourcePath);
+
+        var exit = CliApp.Run(new[] { sourcePath }, new StringWriter(), new StringWriter());
+        Assert.Equal(0, exit);
+
+        var formattedDir = Path.Combine(_tempDir, "formatted");
+        var formattedPath = Path.Combine(formattedDir, "phase3-happy.docx");
+        Assert.True(File.Exists(formattedPath));
+
+        using var doc = WordprocessingDocument.Open(formattedPath, isEditable: false);
+        var body = doc.MainDocumentPart!.Document!.Body!;
+        var paragraphs = body.Elements<Paragraph>().ToList();
+
+        var introIndex = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText.Trim() == Phase3DocxFixtureBuilder.IntroductionText);
+        var receivedIndex = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText.StartsWith("Received:", StringComparison.Ordinal));
+        var acceptedIndex = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText.StartsWith("Accepted:", StringComparison.Ordinal));
+        var publishedIndex = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText.StartsWith("Published:", StringComparison.Ordinal));
+
+        Assert.Equal(introIndex - 3, receivedIndex);
+        Assert.Equal(introIndex - 2, acceptedIndex);
+        Assert.Equal(introIndex - 1, publishedIndex);
+
+        AssertCenteredSection(paragraphs[introIndex], halfPoints: "32");
+        var materialIndex = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText.Trim() == Phase3DocxFixtureBuilder.SectionMaterialText);
+        AssertCenteredSection(paragraphs[materialIndex], halfPoints: "32");
+        var resultsIndex = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText.Trim() == Phase3DocxFixtureBuilder.SectionResultsText);
+        AssertCenteredSection(paragraphs[resultsIndex], halfPoints: "32");
+
+        var subsectionIndex = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText.Trim() == Phase3DocxFixtureBuilder.SubsectionDnaText);
+        AssertCenteredSection(paragraphs[subsectionIndex], halfPoints: "28");
+
+        var titleIdx = FindParagraphIndex(
+            paragraphs,
+            p => p.InnerText == Phase2DocxFixtureBuilder.TitleText);
+        Assert.Equal(JustificationValues.Center, JustificationOf(paragraphs[titleIdx]));
+
+        var tableNestedParagraph = body
+            .Descendants<Paragraph>()
+            .First(p => p.InnerText.Trim() == Phase3DocxFixtureBuilder.TableNestedText);
+        Assert.Null(JustificationOf(tableNestedParagraph));
+        AssertNoFontSizeOnRuns(tableNestedParagraph);
+
+        var diagnosticPath = Path.Combine(formattedDir, "phase3-happy.diagnostic.json");
+        Assert.True(File.Exists(diagnosticPath));
+        var diagnostic = JsonSerializer.Deserialize<DiagnosticDocument>(
+            File.ReadAllText(diagnosticPath),
+            DiagnosticWriter.JsonOptions);
+        Assert.NotNull(diagnostic);
+        Assert.NotNull(diagnostic!.Formatting);
+
+        var historyMove = diagnostic.Formatting!.HistoryMove;
+        Assert.NotNull(historyMove);
+        Assert.True(historyMove!.Applied);
+        Assert.Null(historyMove.SkippedReason);
+        Assert.True(historyMove.AnchorFound);
+        Assert.Equal(3, historyMove.ParagraphsMoved);
+
+        var sectionPromotion = diagnostic.Formatting.SectionPromotion;
+        Assert.NotNull(sectionPromotion);
+        Assert.True(sectionPromotion!.Applied);
+        Assert.Null(sectionPromotion.SkippedReason);
+        Assert.True(sectionPromotion.AnchorFound);
+        Assert.NotNull(sectionPromotion.AnchorParagraphIndex);
+        Assert.True(sectionPromotion.SectionsPromoted >= 3);
+        Assert.Equal(1, sectionPromotion.SubsectionsPromoted);
+
+        AssertPhase3TextsPreserved(inputTexts, formattedPath);
+    }
+
+    [Fact]
+    public void Run_Phase3_AnchorMissing_BothRulesEmitWarn_DiagnosticReportsSkippedReason()
+    {
+        var sourcePath = Path.Combine(_tempDir, "phase3-anchor-missing.docx");
+        Phase3DocxFixtureBuilder.WritePhase123AnchorMissingDocx(sourcePath);
+        var inputTexts = CollectNonEmptyBodyTexts(sourcePath);
+
+        var exit = CliApp.Run(new[] { sourcePath }, new StringWriter(), new StringWriter());
+        Assert.Equal(0, exit);
+
+        var formattedDir = Path.Combine(_tempDir, "formatted");
+        var formattedPath = Path.Combine(formattedDir, "phase3-anchor-missing.docx");
+        Assert.True(File.Exists(formattedPath));
+
+        var reportPath = Path.Combine(formattedDir, "phase3-anchor-missing.report.txt");
+        Assert.True(File.Exists(reportPath));
+        var reportContent = File.ReadAllText(reportPath);
+        Assert.Contains(MoveHistoryRule.AnchorMissingMessage, reportContent);
+        Assert.Contains(PromoteSectionsRule.AnchorMissingMessage, reportContent);
+
+        var diagnosticPath = Path.Combine(formattedDir, "phase3-anchor-missing.diagnostic.json");
+        Assert.True(File.Exists(diagnosticPath));
+        var diagnostic = JsonSerializer.Deserialize<DiagnosticDocument>(
+            File.ReadAllText(diagnosticPath),
+            DiagnosticWriter.JsonOptions);
+        Assert.NotNull(diagnostic);
+        Assert.NotNull(diagnostic!.Formatting);
+
+        var historyMove = diagnostic.Formatting!.HistoryMove;
+        Assert.NotNull(historyMove);
+        Assert.False(historyMove!.Applied);
+        Assert.Equal("anchor_missing", historyMove.SkippedReason);
+        Assert.False(historyMove.AnchorFound);
+        Assert.Equal(0, historyMove.ParagraphsMoved);
+
+        var sectionPromotion = diagnostic.Formatting.SectionPromotion;
+        Assert.NotNull(sectionPromotion);
+        Assert.False(sectionPromotion!.Applied);
+        Assert.Equal("anchor_missing", sectionPromotion.SkippedReason);
+        Assert.False(sectionPromotion.AnchorFound);
+
+        AssertPhase3TextsPreserved(inputTexts, formattedPath);
+    }
+
+    private static IReadOnlyList<string> CollectNonEmptyBodyTexts(string docxPath)
+    {
+        using var doc = WordprocessingDocument.Open(docxPath, isEditable: false);
+        return doc.MainDocumentPart!.Document!.Body!
+            .Descendants<Text>()
+            .Select(t => (t.Text ?? string.Empty).Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+    }
+
+    private static void AssertPhase3TextsPreserved(IReadOnlyList<string> inputTexts, string formattedPath)
+    {
+        var phase3Texts = new[]
+        {
+            Phase3DocxFixtureBuilder.KeywordsText,
+            Phase3DocxFixtureBuilder.BetweenHistoryAndIntroText,
+            Phase3DocxFixtureBuilder.IntroductionBodyText,
+            Phase3DocxFixtureBuilder.SectionMaterialText,
+            Phase3DocxFixtureBuilder.MaterialBodyText,
+            Phase3DocxFixtureBuilder.SubsectionDnaText,
+            Phase3DocxFixtureBuilder.DnaBodyText,
+            Phase3DocxFixtureBuilder.SectionResultsText,
+            Phase3DocxFixtureBuilder.ResultsBodyText,
+            Phase3DocxFixtureBuilder.TableNestedText,
+        };
+
+        var outputTexts = CollectNonEmptyBodyTexts(formattedPath);
+        var inputMultiset = inputTexts.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
+        var outputMultiset = outputTexts.GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
+
+        foreach (var text in phase3Texts)
+        {
+            Assert.True(
+                inputMultiset.TryGetValue(text, out var inputCount) && inputCount > 0,
+                $"fixture sanity: '{text}' missing from input");
+            Assert.True(
+                outputMultiset.TryGetValue(text, out var outputCount) && outputCount >= inputCount,
+                $"INV-01 violated: '{text}' present {inputCount}x in input but {outputCount}x in output");
+        }
+    }
+
+    private static void AssertCenteredSection(Paragraph paragraph, string halfPoints)
+    {
+        Assert.Equal(JustificationValues.Center, JustificationOf(paragraph));
+        var runs = paragraph.Descendants<Run>()
+            .Where(r => r.Descendants<Text>().Any())
+            .ToList();
+        Assert.NotEmpty(runs);
+        Assert.All(runs, run =>
+        {
+            Assert.Equal(halfPoints, run.RunProperties?.FontSize?.Val?.Value);
+            Assert.Equal(halfPoints, run.RunProperties?.FontSizeComplexScript?.Val?.Value);
+        });
+    }
+
+    private static void AssertNoFontSizeOnRuns(Paragraph paragraph)
+    {
+        foreach (var run in paragraph.Descendants<Run>())
+        {
+            Assert.Null(run.RunProperties?.FontSize);
+            Assert.Null(run.RunProperties?.FontSizeComplexScript);
+        }
+    }
+
     private static int FindParagraphIndex(IReadOnlyList<Paragraph> paragraphs, Func<Paragraph, bool> predicate)
     {
         for (var i = 0; i < paragraphs.Count; i++)
@@ -481,7 +680,17 @@ internal static class DocxFixtureBuilder
             children.Add(BuildAbstractParagraph());
         }
 
+        children.Add(BuildIntroductionAnchorParagraph());
+
         return new Body(children);
+    }
+
+    private static Paragraph BuildIntroductionAnchorParagraph()
+    {
+        var run = new Run(
+            new RunProperties(new Bold()),
+            new Text("INTRODUCTION") { Space = SpaceProcessingModeValues.Preserve });
+        return new Paragraph(run);
     }
 
     private static Table BuildTopTable()

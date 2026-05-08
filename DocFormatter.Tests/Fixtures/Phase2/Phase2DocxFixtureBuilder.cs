@@ -50,9 +50,10 @@ internal static class Phase2DocxFixtureBuilder
             path,
             new Phase2Options(IncludeCorrespondingMarker: true, MalformedEmail: true));
 
-    private static Body BuildBody(Phase2Options options)
+    internal static List<OpenXmlElement> BuildPrologueElements(Phase2Options options)
     {
-        var children = new List<OpenXmlElement>
+        ArgumentNullException.ThrowIfNull(options);
+        return new List<OpenXmlElement>
         {
             BuildTopTable(),
             PlainParagraph(SectionText),
@@ -62,8 +63,11 @@ internal static class Phase2DocxFixtureBuilder
             BuildAffiliation2Paragraph(options),
             AbstractParagraphFactory.CreateItalicWrapped(options.AbstractHeading, options.AbstractBody),
         };
+    }
 
-        return new Body(children);
+    private static Body BuildBody(Phase2Options options)
+    {
+        return new Body(BuildPrologueElements(options));
     }
 
     private static Table BuildTopTable()
