@@ -541,6 +541,348 @@ public sealed class DiagnosticWriterTests : IDisposable
         Assert.NotNull(roundtripped.Formatting);
     }
 
+    [Fact]
+    public void Build_HistoryMove_NoEntries_ReturnsNullProperty()
+    {
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-no-history.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.Null(doc.Formatting!.HistoryMove);
+        Assert.Null(doc.Formatting.SectionPromotion);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_MovedInfo_AppliedTrueAnchorTrueParagraphsThree()
+    {
+        var report = new Report();
+        report.Info(
+            nameof(MoveHistoryRule),
+            $"{MoveHistoryRule.MovedMessagePrefix}13)");
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-moved.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        var move = doc.Formatting!.HistoryMove;
+        Assert.NotNull(move);
+        Assert.True(move!.Applied);
+        Assert.Null(move.SkippedReason);
+        Assert.True(move.AnchorFound);
+        Assert.Equal(3, move.ParagraphsMoved);
+        Assert.Equal(13, move.ToIndexBeforeIntro);
+        Assert.Null(move.FromIndex);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_AlreadyAdjacentInfo_AppliedTrueParagraphsZero()
+    {
+        var report = new Report();
+        report.Info(nameof(MoveHistoryRule), MoveHistoryRule.AlreadyAdjacentMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-already-adjacent.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        var move = doc.Formatting!.HistoryMove;
+        Assert.NotNull(move);
+        Assert.True(move!.Applied);
+        Assert.Null(move.SkippedReason);
+        Assert.True(move.AnchorFound);
+        Assert.Equal(0, move.ParagraphsMoved);
+        Assert.Null(move.ToIndexBeforeIntro);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_AnchorMissingWarn_SkippedAnchorMissingAnchorFalse()
+    {
+        var report = new Report();
+        report.Warn(nameof(MoveHistoryRule), MoveHistoryRule.AnchorMissingMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-anchor-missing.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        var move = doc.Formatting!.HistoryMove;
+        Assert.NotNull(move);
+        Assert.False(move!.Applied);
+        Assert.Equal("anchor_missing", move.SkippedReason);
+        Assert.False(move.AnchorFound);
+        Assert.Equal(0, move.ParagraphsMoved);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_PartialBlockWarn_SkippedPartialBlock()
+    {
+        var report = new Report();
+        report.Warn(
+            nameof(MoveHistoryRule),
+            $"{MoveHistoryRule.PartialBlockMessagePrefix}Received=1 Accepted=0 Published=1 — not moved");
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-partial.docx", ctx, report, DateTime.UtcNow);
+
+        var move = doc.Formatting!.HistoryMove;
+        Assert.NotNull(move);
+        Assert.False(move!.Applied);
+        Assert.Equal("partial_block", move.SkippedReason);
+        Assert.True(move.AnchorFound);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_OutOfOrderWarn_SkippedOutOfOrder()
+    {
+        var report = new Report();
+        report.Warn(
+            nameof(MoveHistoryRule),
+            $"{MoveHistoryRule.OutOfOrderMessagePrefix}(Published→Received→Accepted) — not moved");
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-out-of-order.docx", ctx, report, DateTime.UtcNow);
+
+        var move = doc.Formatting!.HistoryMove;
+        Assert.NotNull(move);
+        Assert.False(move!.Applied);
+        Assert.Equal("out_of_order", move.SkippedReason);
+        Assert.True(move.AnchorFound);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_NotAdjacentWarn_SkippedNotAdjacent()
+    {
+        var report = new Report();
+        report.Warn(
+            nameof(MoveHistoryRule),
+            $"{MoveHistoryRule.NotAdjacentMessagePrefix}(gap of 1 non-empty paragraphs between markers) — not moved");
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-not-adjacent.docx", ctx, report, DateTime.UtcNow);
+
+        var move = doc.Formatting!.HistoryMove;
+        Assert.NotNull(move);
+        Assert.False(move!.Applied);
+        Assert.Equal("not_adjacent", move.SkippedReason);
+        Assert.True(move.AnchorFound);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_NotFoundInfo_SkippedNotFound()
+    {
+        var report = new Report();
+        report.Info(nameof(MoveHistoryRule), MoveHistoryRule.NotFoundMessage);
+        // Force the JSON write trigger so DiagnosticFormatting populates beyond Phase 3.
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-not-found.docx", ctx, report, DateTime.UtcNow);
+
+        var move = doc.Formatting!.HistoryMove;
+        Assert.NotNull(move);
+        Assert.False(move!.Applied);
+        Assert.Equal("not_found", move.SkippedReason);
+        Assert.True(move.AnchorFound);
+    }
+
+    [Fact]
+    public void Build_HistoryMove_OnlyPhase3InfoEntry_ForcesFormattingPopulationWithoutPhase12Warn()
+    {
+        // Phase 3 INFO alone makes BuildFormatting populate the HistoryMove sub-object even when
+        // no Phase 1+2 rule warned. The JSON file write trigger (HighestLevel >= Warn) is unchanged
+        // and unrelated.
+        var report = new Report();
+        report.Info(nameof(MoveHistoryRule), MoveHistoryRule.NotFoundMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-info-only.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.NotNull(doc.Formatting!.HistoryMove);
+        Assert.Null(doc.Formatting.AlignmentApplied);
+        Assert.Null(doc.Formatting.AbstractFormatted);
+        Assert.Null(doc.Formatting.AuthorBlockSpacingApplied);
+        Assert.Null(doc.Formatting.CorrespondingEmail);
+        Assert.Null(doc.Formatting.SectionPromotion);
+    }
+
+    [Fact]
+    public void Build_SectionPromotion_NoEntries_ReturnsNullProperty()
+    {
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-no-promotion.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.Null(doc.Formatting!.SectionPromotion);
+    }
+
+    [Fact]
+    public void Build_SectionPromotion_Summary_AppliedTrueWithParsedCounts()
+    {
+        var report = new Report();
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.AnchorPositionMessagePrefix}14");
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.SummaryPromotedPrefix}7{PromoteSectionsRule.SummarySectionsInfix}3{PromoteSectionsRule.SummarySubsectionsSuffix}");
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-promoted.docx", ctx, report, DateTime.UtcNow);
+
+        var promo = doc.Formatting!.SectionPromotion;
+        Assert.NotNull(promo);
+        Assert.True(promo!.Applied);
+        Assert.Null(promo.SkippedReason);
+        Assert.True(promo.AnchorFound);
+        Assert.Equal(14, promo.AnchorParagraphIndex);
+        Assert.Equal(7, promo.SectionsPromoted);
+        Assert.Equal(3, promo.SubsectionsPromoted);
+        Assert.Equal(0, promo.SkippedParagraphsInsideTables);
+        Assert.Equal(0, promo.SkippedParagraphsBeforeAnchor);
+    }
+
+    [Fact]
+    public void Build_SectionPromotion_AnchorMissingWarn_SkippedAnchorMissing()
+    {
+        var report = new Report();
+        report.Warn(nameof(PromoteSectionsRule), PromoteSectionsRule.AnchorMissingMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-promote-missing.docx", ctx, report, DateTime.UtcNow);
+
+        var promo = doc.Formatting!.SectionPromotion;
+        Assert.NotNull(promo);
+        Assert.False(promo!.Applied);
+        Assert.Equal("anchor_missing", promo.SkippedReason);
+        Assert.False(promo.AnchorFound);
+        Assert.Null(promo.AnchorParagraphIndex);
+        Assert.Equal(0, promo.SectionsPromoted);
+        Assert.Equal(0, promo.SubsectionsPromoted);
+    }
+
+    [Fact]
+    public void Build_BothPhase3RulesRan_FormattingPopulatesBothSubObjects()
+    {
+        var report = new Report();
+        report.Info(
+            nameof(MoveHistoryRule),
+            $"{MoveHistoryRule.MovedMessagePrefix}13)");
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.AnchorPositionMessagePrefix}13");
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.SummaryPromotedPrefix}5{PromoteSectionsRule.SummarySectionsInfix}2{PromoteSectionsRule.SummarySubsectionsSuffix}");
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-both.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.NotNull(doc.Formatting!.HistoryMove);
+        Assert.True(doc.Formatting.HistoryMove!.Applied);
+        Assert.Equal(13, doc.Formatting.HistoryMove.ToIndexBeforeIntro);
+        Assert.NotNull(doc.Formatting.SectionPromotion);
+        Assert.True(doc.Formatting.SectionPromotion!.Applied);
+        Assert.Equal(5, doc.Formatting.SectionPromotion.SectionsPromoted);
+        Assert.Equal(2, doc.Formatting.SectionPromotion.SubsectionsPromoted);
+    }
+
+    [Fact]
+    public void Build_NeitherPhase3RuleRan_BothPropertiesNull()
+    {
+        var report = new Report();
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        var ctx = new FormattingContext();
+
+        var doc = DiagnosticWriter.Build("phase3-absent.docx", ctx, report, DateTime.UtcNow);
+
+        Assert.NotNull(doc.Formatting);
+        Assert.Null(doc.Formatting!.HistoryMove);
+        Assert.Null(doc.Formatting.SectionPromotion);
+    }
+
+    [Fact]
+    public void Build_AllSixFormattingSubObjects_PopulatedAndJsonRoundTrips()
+    {
+        // Integration-style: mix Phase 1+2 entries (one INFO, one WARN per rule kind) with Phase 3
+        // INFO and WARN; expect every sub-object on DiagnosticFormatting to be present and the
+        // JSON file to round-trip equal.
+        var path = Path.Combine(_tempDir, "phase3-integration.diagnostic.json");
+        var report = new Report();
+        // Phase 1+2
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        report.Warn(nameof(EnsureAuthorBlockSpacingRule), EnsureAuthorBlockSpacingRule.MissingAuthorBlockEndMessage);
+        report.Warn(nameof(RewriteAbstractRule), RewriteAbstractRule.MissingSeparatorMessage);
+        report.Info(nameof(RewriteAbstractRule), RewriteAbstractRule.StructuralItalicRemovedMessage);
+        report.Warn(nameof(ExtractCorrespondingAuthorRule), ExtractCorrespondingAuthorRule.EmailExtractionFailedMessage);
+        // Phase 3 (one INFO, one WARN equivalent path)
+        report.Info(nameof(MoveHistoryRule), $"{MoveHistoryRule.MovedMessagePrefix}11)");
+        report.Warn(nameof(PromoteSectionsRule), PromoteSectionsRule.AnchorMissingMessage);
+        var ctx = new FormattingContext { Doi = "10.1/x", ElocationId = "e1", ArticleTitle = "T" };
+
+        var fixedTime = new DateTime(2026, 5, 8, 10, 0, 0, DateTimeKind.Utc);
+        var built = DiagnosticWriter.Build("phase3-integration.docx", ctx, report, fixedTime);
+
+        Assert.NotNull(built.Formatting);
+        var f = built.Formatting!;
+        Assert.NotNull(f.AlignmentApplied);
+        Assert.NotNull(f.AbstractFormatted);
+        Assert.NotNull(f.AuthorBlockSpacingApplied);
+        Assert.NotNull(f.CorrespondingEmail);
+        Assert.NotNull(f.HistoryMove);
+        Assert.NotNull(f.SectionPromotion);
+
+        Assert.True(f.HistoryMove!.Applied);
+        Assert.Equal(11, f.HistoryMove.ToIndexBeforeIntro);
+        Assert.False(f.SectionPromotion!.Applied);
+        Assert.Equal("anchor_missing", f.SectionPromotion.SkippedReason);
+
+        DiagnosticWriter.Write(path, "phase3-integration.docx", ctx, report, fixedTime);
+        var roundtripped = ReadDocument(path);
+        Assert.Equal(built, roundtripped);
+    }
+
+    [Fact]
+    public void Write_Phase3JsonRoundTrip_ProducesEqualDocument()
+    {
+        var path = Path.Combine(_tempDir, "phase3-round-trip.diagnostic.json");
+        var report = new Report();
+        report.Info(
+            nameof(MoveHistoryRule),
+            $"{MoveHistoryRule.MovedMessagePrefix}9)");
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.AnchorPositionMessagePrefix}9");
+        report.Info(
+            nameof(PromoteSectionsRule),
+            $"{PromoteSectionsRule.SummaryPromotedPrefix}4{PromoteSectionsRule.SummarySectionsInfix}1{PromoteSectionsRule.SummarySubsectionsSuffix}");
+        report.Warn(nameof(ApplyHeaderAlignmentRule), ApplyHeaderAlignmentRule.MissingTitleParagraphMessage);
+        var ctx = new FormattingContext { Doi = "10.1/x", ElocationId = "e1", ArticleTitle = "T" };
+
+        var fixedTime = new DateTime(2026, 5, 8, 12, 30, 45, DateTimeKind.Utc);
+        var built = DiagnosticWriter.Build("phase3-round-trip.docx", ctx, report, fixedTime);
+        DiagnosticWriter.Write(path, "phase3-round-trip.docx", ctx, report, fixedTime);
+
+        var roundtripped = ReadDocument(path);
+        Assert.Equal(built, roundtripped);
+        Assert.NotNull(roundtripped.Formatting);
+        Assert.NotNull(roundtripped.Formatting!.HistoryMove);
+        Assert.NotNull(roundtripped.Formatting.SectionPromotion);
+
+        var raw = File.ReadAllText(path);
+        Assert.Contains("\"historyMove\":", raw);
+        Assert.Contains("\"sectionPromotion\":", raw);
+        Assert.Contains("\"applied\": true", raw);
+        Assert.Contains("\"sectionsPromoted\": 4", raw);
+        Assert.Contains("\"subsectionsPromoted\": 1", raw);
+    }
+
     private static DiagnosticDocument ReadDocument(string path)
     {
         var raw = File.ReadAllText(path);

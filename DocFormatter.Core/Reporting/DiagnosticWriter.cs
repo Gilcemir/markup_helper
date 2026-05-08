@@ -95,11 +95,15 @@ public static class DiagnosticWriter
         var spacing = FilterByRule(report, nameof(EnsureAuthorBlockSpacingRule));
         var email = FilterByRule(report, nameof(ExtractCorrespondingAuthorRule));
         var abs = FilterByRule(report, nameof(RewriteAbstractRule));
+        var historyMoveEntries = FilterByRule(report, nameof(MoveHistoryRule));
+        var sectionPromotionEntries = FilterByRule(report, nameof(PromoteSectionsRule));
 
-        if (!HasWarnOrError(alignment)
-            && !HasWarnOrError(spacing)
-            && !HasWarnOrError(email)
-            && !HasWarnOrError(abs))
+        var hasPhase12Signal = HasWarnOrError(alignment)
+            || HasWarnOrError(spacing)
+            || HasWarnOrError(email)
+            || HasWarnOrError(abs);
+        var hasPhase3Signal = historyMoveEntries.Count > 0 || sectionPromotionEntries.Count > 0;
+        if (!hasPhase12Signal && !hasPhase3Signal)
         {
             return null;
         }
@@ -109,8 +113,8 @@ public static class DiagnosticWriter
             AbstractFormatted: BuildAbstract(abs),
             AuthorBlockSpacingApplied: BuildSpacingApplied(spacing),
             CorrespondingEmail: BuildCorrespondingEmail(email),
-            HistoryMove: null,
-            SectionPromotion: null);
+            HistoryMove: BuildHistoryMove(historyMoveEntries),
+            SectionPromotion: BuildSectionPromotion(sectionPromotionEntries));
     }
 
     private static List<ReportEntry> FilterByRule(IReport report, string rule)
@@ -207,6 +211,256 @@ public static class DiagnosticWriter
         }
 
         return new DiagnosticCorrespondingEmail(Value: null, Reason: failure.Message);
+    }
+
+    // Reconstructs the Phase 3 history-move diagnostic from MoveHistoryRule's report entries.
+    // FromIndex stays null because the rule does not currently emit the original receivedIndex
+    // in its message text; ToIndexBeforeIntro is parsed from the trailing position number in
+    // MovedMessagePrefix. ParagraphsMoved follows ADR-002 (always 3 on success, 0 otherwise).
+    private static DiagnosticHistoryMove? BuildHistoryMove(IReadOnlyList<ReportEntry> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (entry.Level == ReportLevel.Warn)
+            {
+                if (string.Equals(entry.Message, MoveHistoryRule.AnchorMissingMessage, StringComparison.Ordinal))
+                {
+                    return new DiagnosticHistoryMove(
+                        Applied: false,
+                        SkippedReason: "anchor_missing",
+                        AnchorFound: false,
+                        FromIndex: null,
+                        ToIndexBeforeIntro: null,
+                        ParagraphsMoved: 0);
+                }
+
+                if (entry.Message.StartsWith(MoveHistoryRule.PartialBlockMessagePrefix, StringComparison.Ordinal))
+                {
+                    return new DiagnosticHistoryMove(
+                        Applied: false,
+                        SkippedReason: "partial_block",
+                        AnchorFound: true,
+                        FromIndex: null,
+                        ToIndexBeforeIntro: null,
+                        ParagraphsMoved: 0);
+                }
+
+                if (entry.Message.StartsWith(MoveHistoryRule.OutOfOrderMessagePrefix, StringComparison.Ordinal))
+                {
+                    return new DiagnosticHistoryMove(
+                        Applied: false,
+                        SkippedReason: "out_of_order",
+                        AnchorFound: true,
+                        FromIndex: null,
+                        ToIndexBeforeIntro: null,
+                        ParagraphsMoved: 0);
+                }
+
+                if (entry.Message.StartsWith(MoveHistoryRule.NotAdjacentMessagePrefix, StringComparison.Ordinal))
+                {
+                    return new DiagnosticHistoryMove(
+                        Applied: false,
+                        SkippedReason: "not_adjacent",
+                        AnchorFound: true,
+                        FromIndex: null,
+                        ToIndexBeforeIntro: null,
+                        ParagraphsMoved: 0);
+                }
+            }
+            else if (entry.Level == ReportLevel.Info)
+            {
+                if (entry.Message.StartsWith(MoveHistoryRule.MovedMessagePrefix, StringComparison.Ordinal))
+                {
+                    var toIndex = ParseTrailingInteger(
+                        entry.Message,
+                        MoveHistoryRule.MovedMessagePrefix.Length,
+                        trailingChar: ')');
+                    return new DiagnosticHistoryMove(
+                        Applied: true,
+                        SkippedReason: null,
+                        AnchorFound: true,
+                        FromIndex: null,
+                        ToIndexBeforeIntro: toIndex,
+                        ParagraphsMoved: 3);
+                }
+
+                if (string.Equals(entry.Message, MoveHistoryRule.AlreadyAdjacentMessage, StringComparison.Ordinal))
+                {
+                    return new DiagnosticHistoryMove(
+                        Applied: true,
+                        SkippedReason: null,
+                        AnchorFound: true,
+                        FromIndex: null,
+                        ToIndexBeforeIntro: null,
+                        ParagraphsMoved: 0);
+                }
+
+                if (string.Equals(entry.Message, MoveHistoryRule.NotFoundMessage, StringComparison.Ordinal))
+                {
+                    return new DiagnosticHistoryMove(
+                        Applied: false,
+                        SkippedReason: "not_found",
+                        AnchorFound: true,
+                        FromIndex: null,
+                        ToIndexBeforeIntro: null,
+                        ParagraphsMoved: 0);
+                }
+            }
+        }
+
+        return new DiagnosticHistoryMove(
+            Applied: false,
+            SkippedReason: "unknown",
+            AnchorFound: false,
+            FromIndex: null,
+            ToIndexBeforeIntro: null,
+            ParagraphsMoved: 0);
+    }
+
+    // Reconstructs the Phase 3 section-promotion diagnostic from PromoteSectionsRule's entries.
+    // The rule emits two INFO messages on success (anchor position + summary counts) and a single
+    // WARN on anchor_missing. SkippedParagraphsInsideTables / SkippedParagraphsBeforeAnchor are
+    // not currently emitted by the rule and stay at zero (see task_06 memory for the gap).
+    private static DiagnosticSectionPromotion? BuildSectionPromotion(IReadOnlyList<ReportEntry> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return null;
+        }
+
+        int? anchorParagraphIndex = null;
+        var sectionsPromoted = 0;
+        var subsectionsPromoted = 0;
+        var hasSummary = false;
+
+        foreach (var entry in entries)
+        {
+            if (entry.Level == ReportLevel.Warn
+                && string.Equals(entry.Message, PromoteSectionsRule.AnchorMissingMessage, StringComparison.Ordinal))
+            {
+                return new DiagnosticSectionPromotion(
+                    Applied: false,
+                    SkippedReason: "anchor_missing",
+                    AnchorFound: false,
+                    AnchorParagraphIndex: null,
+                    SectionsPromoted: 0,
+                    SubsectionsPromoted: 0,
+                    SkippedParagraphsInsideTables: 0,
+                    SkippedParagraphsBeforeAnchor: 0);
+            }
+
+            if (entry.Level != ReportLevel.Info)
+            {
+                continue;
+            }
+
+            if (entry.Message.StartsWith(PromoteSectionsRule.AnchorPositionMessagePrefix, StringComparison.Ordinal))
+            {
+                anchorParagraphIndex = ParseTrailingInteger(
+                    entry.Message,
+                    PromoteSectionsRule.AnchorPositionMessagePrefix.Length);
+            }
+            else if (entry.Message.StartsWith(PromoteSectionsRule.SummaryPromotedPrefix, StringComparison.Ordinal)
+                && TryParsePromotionSummary(entry.Message, out var sections, out var subsections))
+            {
+                sectionsPromoted = sections;
+                subsectionsPromoted = subsections;
+                hasSummary = true;
+            }
+        }
+
+        if (!hasSummary && anchorParagraphIndex is null)
+        {
+            return new DiagnosticSectionPromotion(
+                Applied: false,
+                SkippedReason: "unknown",
+                AnchorFound: false,
+                AnchorParagraphIndex: null,
+                SectionsPromoted: 0,
+                SubsectionsPromoted: 0,
+                SkippedParagraphsInsideTables: 0,
+                SkippedParagraphsBeforeAnchor: 0);
+        }
+
+        return new DiagnosticSectionPromotion(
+            Applied: true,
+            SkippedReason: null,
+            AnchorFound: true,
+            AnchorParagraphIndex: anchorParagraphIndex,
+            SectionsPromoted: sectionsPromoted,
+            SubsectionsPromoted: subsectionsPromoted,
+            SkippedParagraphsInsideTables: 0,
+            SkippedParagraphsBeforeAnchor: 0);
+    }
+
+    private static int? ParseTrailingInteger(string message, int startIndex, char? trailingChar = null)
+    {
+        if (startIndex < 0 || startIndex > message.Length)
+        {
+            return null;
+        }
+
+        var slice = message.AsSpan(startIndex);
+        if (trailingChar.HasValue && slice.Length > 0 && slice[^1] == trailingChar.Value)
+        {
+            slice = slice[..^1];
+        }
+
+        return int.TryParse(slice, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
+    }
+
+    private static bool TryParsePromotionSummary(string message, out int sections, out int subsections)
+    {
+        sections = 0;
+        subsections = 0;
+
+        var prefix = PromoteSectionsRule.SummaryPromotedPrefix;
+        var infix = PromoteSectionsRule.SummarySectionsInfix;
+        var suffix = PromoteSectionsRule.SummarySubsectionsSuffix;
+
+        if (!message.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!message.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var infixStart = message.IndexOf(infix, prefix.Length, StringComparison.Ordinal);
+        if (infixStart < 0)
+        {
+            return false;
+        }
+
+        var suffixStart = message.Length - suffix.Length;
+        if (infixStart + infix.Length > suffixStart)
+        {
+            return false;
+        }
+
+        var sectionsToken = message.AsSpan(prefix.Length, infixStart - prefix.Length);
+        var subsectionsToken = message.AsSpan(infixStart + infix.Length, suffixStart - (infixStart + infix.Length));
+
+        if (!int.TryParse(sectionsToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out sections))
+        {
+            return false;
+        }
+
+        if (!int.TryParse(subsectionsToken, NumberStyles.Integer, CultureInfo.InvariantCulture, out subsections))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static bool HasWarnMessage(IReadOnlyList<ReportEntry> entries, string message)
