@@ -1,0 +1,697 @@
+9:Private Sub Document_New()
+38:Public Sub markup_keywords(ByRef text_range As range)
+113:Public Sub RemoveEntities()
+126:Public Sub find_text_in_range_backward(ByVal text As String, ByRef text_range As range, ByRef selection_start As Long, ByRef selection_end As Long, Optional use_wildcards As Boolean)
+174:Public Sub mark_publisher(ByRef text_range As range, tag1 As String, tag2 As String)
+233:Sub mark_deflist(ByRef text_range As range)
+371:Public Function InsertTag(ByVal tag_button_label As String, color As WdColor, conf As clsConfig, ByRef tagged_start As Long, ByRef tagged_end As Long, Optional attl As clsAttrList, Optional linkl As clsLink, Optional inter As clsInterface) As Boolean
+759:Public Sub delete_all_tags(ByRef text_range As range)
+786:Public Function DeleteTag(conf As clsConfig, listbar As clsListBar) As Boolean
+803:Public Function delete_tag_selected(ByRef tag_range As range) As Boolean
+851:Public Sub delete_textref(ByRef textrange As range)
+964:Public Sub FormatText(txt As range, color As WdColor)
+1003:Public Function buildStartTag(tag As String, conf As clsConfig, Optional attl As clsAttrList, Optional link As clsLink, Optional inter As clsInterface) As String
+1063:Public Function writeAttribute(attName As String, attVal As String) As String
+1072:Public Function BuildFinishTag(tag As String, conf As clsConfig, Optional force As Boolean = False) As String
+1097:Public Sub disableScreen()
+1119:Public Sub EnableScreen()
+1145:Public Function ChangeAttribute(conf As clsConfig, listbar As clsListBar, linkl As clsLkList, listattr As clsAttrList, i As clsInterface, Optional fPos As Long) As Boolean
+1261:Public Function ChangeAttributeActiveDocument(conf As clsConfig, listbar As clsListBar, linkl As clsLkList, listattr As clsAttrList, i As clsInterface, Optional fPos As Long) As Boolean
+1371:Public Function VerifyInsertInto(conf As clsConfig, listbar As clsListBar) As Boolean
+1492:Public Function VerifyHierarchy(conf As clsConfig, listbar As clsListBar, currentBar As String, tag As String) As Boolean
+1598:Function verify_father(currentBar As String, father As String) As Boolean
+1602:Function verify_sibling(listbar As clsListBar, currentBar As String, sibling As String, tag As String) As Boolean
+1622:Function has_square_brackets() As Boolean
+1668:Function verify_hier_previous_element() As String
+1710:Function verify_hier_next_element() As String
+1755:Public Sub BuildLog(conf As clsConfig, attl As clsAttrList)
+1800:Public Sub DisplayBar(barname As String, flag As Boolean, Optional is_float As Boolean)
+1900:Public Sub xDisplayBar(barname As String, flag As Boolean, Optional is_float As Boolean)
+2012:Public Function readValidFileFormats(conf As clsConfig) As String
+2026:Public Function readFileFormatInUse(conf As clsConfig) As Word.WdSaveFormat
+2046:Public Sub saveFileFormatInUse(conf As clsConfig, format As Word.WdSaveFormat)
+2057:Public Function VerifyDocumentHTMLFormat(conf As clsConfig) As Boolean
+2077:Function IsDocumentInMarkupXMLFolder() As Boolean
+2080:Function IsDocumentInMarkupFolder() As Boolean
+2084:Public Function VerifyDocumentMarkupFormat(conf As clsConfig) As Boolean
+2113:Function ReplaceAll(parm_word As String, parm_replaceby As String) As Boolean
+2150:Public Sub ChangeSTAGO_TAGC(conf As clsConfig, listbar As clsListBar)
+2198:Public Sub ChangeFields(conf As clsConfig)
+2230:Public Sub ChangeBadChars()
+2262:Public Sub ReplaceTraco()
+2295:Public Sub RemoveSectionBreaks()
+2351:Public Sub ChangeHtmlMarkup(conf As clsConfig)
+2385:Public Sub ChangeEntity(conf As clsConfig)
+2417:Public Function FindTag(listbar As clsListBar, conf As clsConfig, forward As Boolean, start As Boolean, tag As String, Optional sX As Long, Optional fX As Long) As Boolean
+2516:Public Function findText(ByVal t As String, f As Boolean, Optional sPos As Long, Optional fPos As Long) As Boolean
+2558:Public Sub find_text_in_range(ByVal text As String, ByRef text_range As range, ByRef selection_start As Long, ByRef selection_end As Long, Optional use_wildcards As Boolean)
+2607:Sub mark_all_of_a_kind(ByRef text_range As range, find_text As String, replace_text As range)
+2661:Public Function is_in_textref(part As range) As Boolean
+2674:Public Function findTextSpecial(ByVal t As String, f As Boolean, Optional sPos As Long, Optional fPos As Long) As Boolean
+2713:Public Function BuildFilePathName(filePath As String, ext As String, Optional pmcDir As String) As String
+2735:Public Function RestoreScreen()
+2765:Private Function myFindTag(myString As String, ByRef selectedRange As range) As Boolean
+2788:Function isRootTag(tag As String) As Boolean
+2791:Function isTagMarked(tag As String, Optional ByRef q As Long, Optional attr As String) As Boolean
+2852:Function isWellFormedRange(text_range As range) As Boolean
+2940:Function isWellFormed(ByVal text_range As range) As Boolean
+3033:Function mark_styles(filename) As Boolean
+3060:Function mark_stylesbkp(filename) As Boolean
+3116:Private Sub keepStyle(format As String)
+3220:Private Sub keepstylebkp2(format As String)
+3316:Private Sub keepStyleBkp(format As String)
+3401:Private Sub keepstyleVelho(format As String)
+3516:Private Sub replace_styled_text_by_tags(ByRef text_range As range)
+3581:Private Sub restore_styles(text_range As range)
+3587:Private Sub restore_style(text_range As range, tag As String)
+3652:Sub replace_style_by_tags(ByRef text_range As range)
+3699:Sub tag_text_range(ByRef text_range As range, ByVal open_tag As String, ByVal close_tag As String, ByVal color As WdColor, Optional font_size As Long, Optional fix_end As Boolean = True)
+3838:Function closeEmptyTag(tag As String) As Boolean
+3886:Function fix_table2(tag As String) As Boolean
+3915:Function fix_table() As Boolean
+4053:Function normalize_fn_xref_text() As String
+4084:Public Function cleanTagStyle() As Boolean
+4131:Public Function fixPunctuation() As Boolean
+4152:Public Sub removeTag(ByRef text_range As range, tag_name As String)
+4183:Public Function mark_symbols() As Boolean
+4248:Private Function findFontSymbol(f As Boolean, Optional sPos As Long, Optional fPos As Long) As Boolean
+4281:Function CheckingTablesAndGraphicsMarkup(msgQuantity As String) As Boolean
+4314:Function RetAttrValue(ByVal fulltag As String, ByVal attr As String) As String
+4344:Function isEmptyTag(tag As String) As Boolean
+4348:Private Sub Class_Initialize()
+4352:Public Sub fix_endtag_position()
+4424:Public Sub select_footnote(ByRef r As range)
+4463:Public Function CheckHistory(d1 As String, d2 As String) As Boolean
+4479:Public Function findAndReturnAttrValue(start As Long, tag As String, attr As String) As String
+4517:Sub add_citation_tag(ByRef text_range As range, citation_tag As String)
+4549:Sub add_ref_tag(ByRef text_range As range, default_reftype As String)
+4621:Sub mark_textref(ByRef ref_range As range)
+4649:Function find_previous_authors_elements(ByRef authorsRange As range) As range
+4730:Function find_precedent_siblings_authors_elements(ByRef authorRange As range) As range
+4767:Function count_elements(ByRef textrange As range, elem_name As String) As Long
+4799:Sub mark_authors(ByRef authors_range As range)
+4970:Function is_previous_author(text_range As range) As Boolean
+4979:Sub mark_previous_author(ByRef authorsRange As range)
+5027:Function get_previous_author(ByRef PREVIOUS_AUTHORS As range, i As Long) As range
+5083:Sub markup_author(ByRef selected_text As range, author_tag As String)
+5163:Function get_references_range(first_found_end As Long) As range
+5198:Sub markup_all_the_sertitles(ByRef selected_text As range, tag As String)
+5229:Function fix_jr_position(ByRef text As range) As range
+5248:Sub markup_surname_and_fname(ByRef selected_text As range, Optional surname_first As Boolean = False)
+5388:Sub markup_fname_and_surname(ByRef selected_text As range)
+5464:Sub markup_fname_and_spanish_surname(ByRef selected_text As range)
+5540:Sub oldmarkup_fname_and_surname(ByRef selected_text As range)
+5662:Function separate_surname_and_fname(text As String) As Variant
+5689:Sub delete_fnote_tag(note_fn As range, note_xref As range)
+5763:Sub mark_note(ByRef note_fn As range, ByRef note_xref As range, ByVal index As Long, ByRef num As Long, ByRef c As String, ByRef fnrange As range)
+5864:Sub bkp_mark_note(ByRef note_fn As range, ByRef note_xref As range, ByVal index As Long, ByRef num As Long, ByRef c As String, ByRef fnrange As range)
+5965:Sub delete_all_the_footnotes()
+5982:Sub markup_all_the_footnotes()
+6045:Sub edit_attributes(ByRef textrange As range, ref_elem_name As String, listbar As clsListBar, conf As clsConfig, linkl As clsLkList, i As clsInterface, listattr As clsAttrList)
+6077:Public Sub convert_doc_fngrp_to_fn()
+6109:Public Function count()
+6125:Public Sub AddNew(line As String)
+6170:Public Function GetItem(i As Long) As ResultsTableEntry
+6186:Public Sub Clean()
+6205:Private Sub Class_Terminate()
+6254:Function format_issue_id(stitle As String) As String
+6272:Function generateIssueInfoXML() As String
+6655:Function go_up() As String
+6668:Function go_down(down As String) As String
+6675:Function get_current() As String
+6692:Sub list_templates(caller As String)
+6713:Sub TEMPLATES_SAVED(caller As String)
+6723:Public Function markup_bars_are_available() As Boolean
+6734:Public Sub bars_disable_markup()
+6740:Public Sub bars_destroy_markup_bar()
+6763:Private Function current_template()
+6785:Public Sub Conversor10_20()
+7076:Sub load(lang As String)
+7157:Function get_node(name As String) As clsNode
+7167:Function get_tree() As Collection
+7170:Function get_description(name As String) As String
+7180:Private Function get_color() As WdColor
+7192:Private Sub Class_Initialize()
+7227:Public Function is_element(t As String) As Boolean
+7237:Function barname(name As String) As String
+7243:Public Sub LoadBarsData(conf As clsConfig)
+7257:Public Sub CreateBars(conf As clsConfig)
+7380:Public Sub KillBars()
+7406:Public Sub BuildTempFile()
+7410:Public Sub LoadTempFile()
+7413:Public Function is_in_float_hierarchy(b As String) As Boolean
+7416:Public Function is_float(father As String, tag As String) As Boolean
+7426:Public Function is_father(tag As String, father As String) As Boolean
+7434:Public Function is_empty(tag As String) As Boolean
+7437:Public Function is_sibling(father As String, sibling As String, tag As String) As Boolean
+7458:Function color(tag As String) As WdColor
+7462:Function has_children(tag As String) As Boolean
+7625:Public Function GetResponsible() As String
+7642:Public Sub SetResponsible(mr As String)
+7659:Public Function GetLanguage() As String
+7676:Public Sub SetLanguage(l As String)
+7693:Public Sub SetFirstHour()
+7710:Public Function GetFirstHour() As Variant
+7727:Public Sub SetLastHour()
+7744:Public Function GetLastHour() As Variant
+7761:Public Function GetMarkupTime() As String
+7791:Public Sub LoadPublicValues()
+7946:Sub add_child(ch As clsChild)
+7954:Function get_child(name As String) As clsChild
+7984:Sub insert_hyperlinks_using_pattern(text_range As range, pattern As String, prefix As String)
+8050:Sub insert_hyperlinks_in_range(ByRef text_range As range)
+8062:Public Sub disableScreen()
+8078:Public Sub EnableScreen()
+8099:Function markup_aff_label(range As range, logfile As clsLogFile) As range
+8113:Private Function cmtoinches(cm As Long) As Double
+8117:Sub markup_ack(ByRef text_range As range)
+8121:Sub mark_list(ByRef text_range As range)
+8175:Sub add_hyperlinks_to_numberic_bibr_xref(ByRef text_range As range, pattern As String)
+8251:Function format_number(n As String, size As Long) As String
+8256:Sub find_tagged(ByRef text_range As range, ByVal references_tag As String, ByRef p_start As Long, ByRef p_end As Long)
+8278:Sub add_bookmarks_to_references()
+8357:Sub manage_xref(ByRef text_range As range, insertTagAllowedCheck As Boolean, log_file As clsLogFile)
+8364:Function mark_xmlabstr(ByRef text_range As range)
+8432:Function mark_abstract(text_range As range, parlogfile As clsLogFile) As range
+8456:Function mark_xmlbody(ByRef text_range As range, parlogfile As clsLogFile, Optional insertTagAllowedCheck As Boolean = True) As range
+8475:Public Sub removeTag(ByRef text_range As range, tag_name As String)
+8503:Sub mark_verse_group(ByRef text_range As range)
+8518:Sub mark_sec(ByRef text_range As range, Optional insertTagAllowedCheck As Boolean = True)
+8537:Sub mark_sectitle_and_paragraphs(ByRef text_range As range)
+8571:Function is_refs_bookmarked() As Boolean
+8584:Sub prepare_text_to_mark_bibr_xref(ByRef text_range As range)
+8608:Sub add_hyperlinks_to_author_date_xref(ByRef text_range As range)
+8635:Private Function markupHyperLinks(ByRef range As range, insertTagAllowedCheck As Boolean, logfile As clsLogFile) As range
+8667:Private Function is_alpha(s As String) As Boolean
+8682:Private Sub get_xref_rid_and_reftype(hpl As Hyperlink, ByRef rid As String, ByRef reftype As String)
+8718:Private Sub markupAsInternalLink(hpl As Hyperlink, insertTagAllowedCheck As Boolean, ByRef qCharsInserted As Long)
+8791:Private Sub markupAsExternalLink(hpl As Hyperlink, insertTagAllowedCheck As Boolean, ByRef qCharsInserted As Long)
+8823:Sub markupGraphics(ByRef text_range As range, force As Boolean)
+8931:Private Function is_graphic_identified(text_range As range) As Boolean
+8945:Private Function get_href(inline_shape As InlineShape) As String
+8996:Sub markup_label_and_caption(ByRef text_range As range)
+9064:Sub old_markup_label_and_caption(ByRef text_range As range)
+9160:Private Sub markup_table_footnotes(ByRef text_range As range)
+9307:Public Function findText(ByVal t As String, f As Boolean, Optional sPos As Long, Optional fPos As Long) As Boolean
+9346:Function format_attribute(attrname As String, attrval As Variant) As String
+9350:Sub mark_tabwrap_content(ByRef table_range As range)
+9399:Sub mark_odd_tables(ByRef tables_range As range)
+9506:Private Function valid_coord(table_table As table, row As Long, COL As Long) As Boolean
+9517:Private Sub get_table_info(ByRef table_table As table, ByRef max_row As Long, ByRef max_col As Long, ByRef header_row As Long, ByRef uniform_row_index As Long)
+9555:Function is_uniform_table(ByRef table_table As table, max_row As Long, max_col As Long) As Boolean
+9565:Private Sub undo_split(ByRef table_table As table)
+9602:Private Sub fix_odd_table_undo_split(ByRef table_table As table, max_row As Long, max_col As Long)
+9643:Private Sub get_spans_info(ByRef table_table As table, max_row As Long, max_col As Long, ByVal uniform_row_index As Long)
+9650:Private Sub fix_odd_table(ByRef table_table As table, max_row As Long, max_col As Long, ByVal uniform_row_index As Long)
+9655:Private Sub fix_odd_table_colspans(ByRef table_table As table, max_row As Long, max_col As Long, uniform_row_index As Long)
+9740:Private Sub find_colspans(ByRef table_table As table, max_row As Long, max_col As Long, uniform_row_index As Long)
+9788:Private Sub fix_odd_table_rowspans(ByRef table_table As table, max_row As Long, max_col As Long)
+9855:Private Function is_empty_cell(c As Cell) As Boolean
+9870:Private Sub find_rowspans(ByRef table_table As table, max_row As Long, max_col As Long)
+9925:Private Function format_coord(i As Long, j As Long) As String
+9931:Function format_alignment(a As WdParagraphAlignment) As String
+9945:Sub mark_table(ByRef t_table As table)
+9958:Sub mark_odd_table(ByRef t_table As table, ByRef max_row As Long, ByRef max_col As Long, ByRef header_row As Long, ByRef uniform_row_index As Long)
+10046:Sub mark_uniform_table(ByRef t_table As table, ByRef max_row As Long, ByRef max_col As Long, ByRef header_row As Long, ByRef uniform_row_index As Long)
+10120:Function mark_uniform_tables(ByRef table_range As range) As Boolean
+10246:Private Sub registermessage(functionName As String, msg As String, privLogFile As clsLogFile)
+10255:Private Function priv_ignore(text As String) As Boolean
+10260:Private Function getSectionId(section As String) As String
+10313:Public Sub InsertTag2(ByRef text_range As range, tag As String, colorI As WdColor, attributes As String, Optional spaceChr As String)
+10363:Public Sub FormatText(txt As range, color As WdColor)
+10395:Function isEmptyTag(tag As String) As Boolean
+10400:Public Function BuildFinishTag(tag As String, Optional force As Boolean = False) As String
+10423:Public Function InsertTagAllowed(parRange As range, tag As String, TRAC_XX As String) As Boolean
+10463:Function markupScientificName(range As range) As Boolean
+10625:Sub markup_sup_as(tag As String, ByRef text_range As range, sep As String, rep_sep As String, logfile As clsLogFile)
+10717:Public Sub find_text_in_range(ByVal text As String, ByRef text_range As range, ByRef selection_start As Long, ByRef selection_end As Long, Optional use_wildcards As Boolean)
+10764:Public Sub find_text_in_range_backward(ByVal text As String, ByRef text_range As range, ByRef selection_start As Long, ByRef selection_end As Long, Optional use_wildcards As Boolean)
+10813:Sub find_sup_in_range(ByRef text_range As range, ByRef selection_start As Long, ByRef selection_end As Long)
+10835:Sub clear_range()
+10839:Sub tag_text_range(ByRef text_range As range, open_tag As String, close_tag As String, color As WdColor, Optional font_size As Long, Optional fix_end As Boolean = True)
+10976:Function get_first_surname_in_ref(ByVal ref_text As String) As String
+10996:Function get_year_in_ref(ByVal ref_text As String) As String
+11028:Sub find_author_date_pattern_and_add_hyperlink(ByRef text_range As range, ref_range As range, bk_name As String)
+11073:Sub add_hyperlink_to_author_date(ByRef text_range As range, name_year As String, bk_name As String)
+11124:Function is_valid_xref_range(ByRef r As range, year As String) As Boolean
+11138:Function replace_diacritic_by_interrogation(text As String) As String
+11157:Sub mark_template(ByRef doc As range)
+11197:Function detect_language(text_range As range) As String
+11224:Public Function writeAttribute(attName As String, attVal As String) As String
+11234:Function mark_template_author(ByRef p As Long) As Long
+11295:Sub fix_surname_with_suffix(ByRef surname_range As range)
+11328:Function get_next_valid_paragraph_range(ByRef index As Long) As range
+11337:Function get_next_paragraph_range(ByRef index As Long) As range
+11345:Sub mark_template_aff(ByRef p As Long)
+11371:Function mark_xmlbody_format_list_item(ByVal s As String) As String
+11384:Sub mark_xmlbody_paragraphs(ByRef text_range As range)
+11601:Function xmlbody_paragraph_style(p As range) As String
+11635:Public Sub mark_fngrp(ByRef text_range As range, linkl As clsLkList, listattr As clsAttrList, inter As clsInterface)
+11687:Public Sub mark_fn(ByRef text_range As range)
+11705:Public Function mark_text_as_label(ByRef text As range) As String
+11725:Public Function mark_label(ByRef text As range) As String
+11742:Public Sub edit_attributes_in_range(ByRef text As range, linkl As clsLkList, listattr As clsAttrList, inter As clsInterface)
+11797:Public Function buildOpenTag(element_name As String, conf As clsConfig, Optional attl As clsAttrList, Optional attributes As clsLink, Optional inter As clsInterface) As String
+11812:Public Function find_next_opentag_in_range(ByRef text_range As range) As range
+11855:Public Sub InsertIssue(i As clsIssue)
+11879:Public Function getIssueByIndex(k As Variant) As clsIssue
+11907:Public Function getIssueByKey(v As String) As clsIssue
+11934:Public Function ReturnCount() As Integer
+11951:Public Sub LoadIssue(conf As clsConfig)
+12105:Function ExecuteAutomata(automata As String, tags As String, elem As String) As String
+12196:Public Sub ShowResults(ResultsTable As ResultsTable)
+12313:Sub SetMenuButtonsStatus(is_sgml_visible As Boolean)
+12337:Sub Main()
+12583:Sub display_hidden_characteres()
+12595:Function executeCheckHistory(m As clsMarkup, conf As clsConfig) As Boolean
+12606:Sub executeButtonParser(m As clsMarkup, conf As clsConfig, listbar As clsListBar)
+12628:Sub executeChangeSTAGO_TAGC(m As clsMarkup, conf As clsConfig, listbar As clsListBar)
+12648:Sub executeButtonGenerateXML(m As clsMarkup, conf As clsConfig, listbar As clsListBar, inter As clsInterface)
+12666:Sub executeButtonSave(m As clsMarkup)
+12682:Sub convert_docx()
+12692:Sub SubStartMarkup(listbar As clsListBar, m As clsMarkup, listattr As clsAttrList, listLink As clsLkList, inter As clsInterface)
+12822:Sub update_automata_buttons(journal_data As ClsJournal)
+12832:Function get_journal_standard(journal_data As ClsJournal)
+12843:Function read_root_tag(ByRef gendebugfile As clsLogFile, ByRef firstValidParag As String) As String
+12886:Function SubExit(listbar As clsListBar, m As clsMarkup, conf As clsConfig, _
+12947:Sub SubChange(m As clsMarkup, c As clsConfig, lBar As clsListBar, lLink As clsLkList, lAttr As clsAttrList, i As clsInterface)
+12967:Sub SubDelete(m As clsMarkup, conf As clsConfig, listbar As clsListBar)
+13037:Sub SubAutomatic1(selected_automata_filename As String, label As String, conf As clsConfig, i As clsInterface, listbar As clsListBar, m As clsMarkup, listattr As clsAttrList, linkl As clsLkList)
+13109:Sub select_current_parag()
+13113:Sub select_next_paragraph()
+13120:Sub SubAutoMarkupServices(conf As clsConfig, i As clsInterface, listbar As clsListBar, m As clsMarkup, listattr As clsAttrList)
+13176:Sub SubAutoMarkupServicesForArticleOrText(conf As clsConfig, i As clsInterface, listbar As clsListBar, m As clsMarkup, listattr As clsAttrList)
+13229:Sub SubAutoMarkupServicesForDoc(conf As clsConfig, i As clsInterface, listbar As clsListBar, m As clsMarkup, listattr As clsAttrList)
+13264:Sub ExecuteAutoMarkup(standard As String, serviceType As String, insertMainTag As Boolean, dodebug As Boolean)
+13307:Sub SubElse(m As clsMarkup, lBar As clsListBar, lLink As clsLkList, lAttr As clsAttrList, conf As clsConfig, i As clsInterface, button As CommandBarButton)
+13433:Sub SubHelp()
+13450:Sub SubDown(m As clsMarkup, listbar As clsListBar, downBarName As String)
+13482:Sub SubUp(m As clsMarkup, listbar As clsListBar, currentBarname As String)
+13516:Sub MainConfig()
+13552:Sub Conv()
+13579:Function setAhead(issue As String)
+13586:Function getPidCaption() As String
+13594:Function getPidAttribute() As String
+13603:Sub SaveDocumentAsSciELOMarkup(m As clsMarkup, mkpconfig As clsConfig, listbar As clsListBar)
+13626:Sub SaveDocument(m As clsMarkup)
+13666:Sub SaveDocumentAsText(m As clsMarkup, f As String)
+13682:Sub open_sgml_file()
+13692:Function SaveDocumentAsXML(ByRef m As clsMarkup, ByRef conf As clsConfig, inter As clsInterface) As Boolean
+13770:Function PreviewFulltext(m As clsMarkup, conf As clsConfig) As Boolean
+13773:Function DisplayLogFile(m As clsMarkup, conf As clsConfig) As Boolean
+13776:Function DisplayContentValidationReport(m As clsMarkup, conf As clsConfig) As Boolean
+13780:Function DisplayValidationReport(m As clsMarkup, conf As clsConfig) As Boolean
+13784:Function PMCPreviewFulltext(m As clsMarkup, conf As clsConfig) As Boolean
+13788:Function PMCDisplayValidationReport(m As clsMarkup, conf As clsConfig) As Boolean
+13792:Function DisplayReport(m As clsMarkup, conf As clsConfig, pathreport As String, logfilename As String) As Boolean
+13842:Function ExecuteSGMLParser(program As String, filename As String) As Boolean
+13849:Function myReplace(text As String, Find As String, replaceby As String) As String
+13862:Private Function loadTables(conf As clsConfig, m As clsMarkup, listattr As clsAttrList, listIssue As clsIssueList, listLink As clsLkList, listbar As clsListBar) As Boolean
+13913:Function isNumber(n As String) As Boolean
+13917:Function markup_version(s As String) As Integer
+13921:Sub loadOptions()
+13953:Private Sub CommandButton_cancel_Click()
+13972:Private Sub CommandButton_clear_Click()
+13992:Private Sub CommandButton_OK_Click()
+14015:Private Sub CommandButton_record_Click()
+14048:Private Sub UserForm_Initialize()
+14091:Private Sub UserForm_Terminate()
+14108:Public Function VerifyFrmConfig() As Boolean
+14139:Public Sub SetGlobalValues()
+14182:Private Sub Form_Load()
+14200:Private Sub FirstChoice_Click()
+14216:Private Sub LastChoice_Click()
+14233:Private Sub Markup_Click()
+14354:Private Sub NextChoice_Click()
+14370:Private Sub PreviousChoice_Click()
+14386:Private Sub Undo_Click()
+14405:Private Sub UserForm_Terminate()
+14428:Private Function getcolor(i As Integer) As WdColor
+14452:Public Sub DisplayErr(conf As clsConfig)
+14466:Public Sub BuildErrLog(conf As clsConfig)
+14516:Public Function convertXML2SGML(xmlcontent As String, xslToConvertXML2SGML As String, logfile As clsLogFile) As String
+14580:Public Function count()
+14596:Public Sub AddNew(line As String)
+14630:Public Function GetItem(i As Long) As tag
+14646:Public Function GetTagName(key As String) As String
+14653:Public Function GetTagAttributes(key As String) As String
+14676:Public Function load(filename As String) As Boolean
+14698:Public Sub Clean()
+14717:Private Sub Class_Terminate()
+14744:Public Sub InsertAttr(s As String)
+14761:Public Function ReturnAttr(k As String) As String
+14773:Public Function ReturnCount() As Integer
+14796:Private Sub CommandButton1_Click()
+14801:Private Sub CommandButton2_Click()
+14937:Public Sub InsertValue(v As clsValue)
+14952:Public Function ReturnValue(k As String) As clsValue
+14981:Public Function ReturnCount() As Integer
+14998:Public Function GetExtVal(abbrVal As String) As String
+15014:Public Sub loadConversionTable(file As String, firstElementIsTheKey As Boolean)
+15042:Function count() As Long
+15046:Function item(key As Variant) As ClsPair
+15054:Public Function change(text As String) As String
+15083:Sub AutoExec()
+15144:Sub AutoOpen()
+15195:Sub AutoExit()
+15266:Sub Delete_AddIn(conf As clsConfig)
+15293:Sub AutoClose()
+15341:Public Sub InsertLink(l As clsLink)
+15358:Public Function ReturnLink(k As String) As clsLink
+15370:Public Function ReturnCount() As Integer
+15387:Public Sub LoadLink(conf As clsConfig)
+15444:Private Sub CB_Cancel_Click()
+15449:Private Sub CB_OK_Click()
+15459:Private Sub UserForm_Initialize()
+15483:Private Sub UserForm_Terminate()
+15496:Public Sub LoadErr(conf As clsConfig)
+15531:Public Function ReturnErr(k As String) As clsErr
+15544:Public Sub BuildLog(key As String, conf As clsConfig)
+15596:Private Sub frmMainElement_read_form(attrl As clsAttrList)
+15623:Public Sub frmMainElement_end()
+15645:Public Sub frmMainElement_show(conf As clsConfig, issueL As clsIssueList, journal_list As clsJournalList, attl As clsAttrList, tag As String, tag_with_attr As String)
+15663:Public Sub frmMainElement_flagchange(value As Boolean)
+15671:Public Function frmMainElement_flagOK() As Boolean
+15679:Public Sub frmMainElement_save(conf As clsConfig, attl As clsAttrList)
+15685:Private Sub frmMainElement_save_tempfile(conf As clsConfig)
+15720:Public Sub frmAttribute_set(attrl As clsAttrList, lk As clsLink, tag As String, Optional tag_with_attributes As range)
+15950:Private Function find_specyear(content As String) As String
+15969:Private Function text_to_dateiso(content As String) As String
+16015:Public Sub frmNormalizedAff_set(attrl As clsAttrList, lk As clsLink, tag As String, Optional tag_with_attributes As range)
+16168:Public Sub frmAttribute_show(conf As clsConfig)
+16188:Public Sub frmAttribute_end()
+16208:Public Sub frmAttribute_exit(attl As clsAttrList)
+16245:Public Sub frmNormalizedAff_exit(attl As clsAttrList)
+16284:Public Sub frmAttribute_SetDefaultValueAbbr(attl As clsAttrList)
+16356:Public Sub ShowFrmConfig(conf As clsConfig)
+16383:Public Sub EndFrmConfig()
+16400:Public Sub BuildMarkupBar(conf As clsConfig)
+16469:Sub DestroyMarkupBar(conf As clsConfig)
+16484:Sub HideAllBars()
+16532:Sub EnableWordBars()
+16562:Public Sub SetPositionFrms(conf As clsConfig)
+16577:Private Sub frmMainElement_read_values(conf As clsConfig, doctag As String, attrl As clsAttrList, issueList As clsIssueList)
+16595:Sub frmMainElement_read_doc_tag(doctag As String, issue_list As clsIssueList)
+16728:Sub oldfrmMainElement_read_doc_tag(doctag As String, issue_list As clsIssueList)
+16850:Private Sub frmMainElement_read_tempfile(conf As clsConfig, issue_list As clsIssueList)
+16862:Private Sub frmMainElement_read_nolangtempfile(conf As clsConfig, issue_list As clsIssueList)
+16908:Private Sub frmMainElement_read_langtempfile(conf As clsConfig, issue_list As clsIssueList)
+16952:Function RetAttrValue(ByVal tag_with_attributes As String, ByVal attr_name As String) As String
+16982:Sub find_out_lang(range As range, default As String, combo As ComboBox)
+17007:Sub choose_combo_text(combo As ComboBox, pt As String, es As String, en As String)
+17016:Function exist_lang(combo As ComboBox, lang_name As String) As String
+17030:Public Function writeAttribute(attName As String, attVal As String) As String
+17038:Public Function start_tag_attributes() As String
+17126:Public Function GetTokens(s As String, ByRef tk As String) As Boolean
+17175:Private Sub Class_Initialize()
+17178:Private Sub AddNew(f As Integer)
+17191:Public Function load(filename As String) As Long
+17212:Public Function getnext() As ResultsTable
+17218:Public Function GetCurrent() As ResultsTable
+17221:Public Function GetPrev() As ResultsTable
+17227:Public Function GetFirst() As ResultsTable
+17233:Public Function GetLast() As ResultsTable
+17239:Public Function GetItem(i As Long) As ResultsTable
+17242:Public Sub Clean()
+17248:Private Sub Class_Terminate()
+17276:Private Sub ComboBox_issueid_Change()
+17300:Private Sub ComboBox_version_Change()
+17320:Private Sub CommandButton_cancel_Click()
+17335:Private Sub CommandButton_OK_Click()
+17355:Private Sub Text_isidpart_Change()
+17361:Private Sub UserForm_Terminate()
+17378:Public Function VerifyFrmArticle() As Boolean
+17470:Public Function VerifyDateValue(d As String) As Boolean
+17502:Function VerifyPII(t As String) As Boolean
+17536:Function VerifyORDER(t As String) As Boolean
+17571:Function VerifyVOLID(t As String) As Boolean
+17598:Function VerifyISSUENO(t As String) As Boolean
+17625:Function VerifyDATEISO(t As String) As Boolean
+17656:Function VerifySUPPLVOL(t As String) As Boolean
+17688:Function VerifySUPPLNO(t As String) As Boolean
+17720:Function VerifyTOCCODE() As Boolean
+17742:Function VerifyLANGUAGE() As Boolean
+17762:Function VerifyTYPE() As Boolean
+17801:Function VerifySTATUS() As Boolean
+17821:Function VerifyVERSION() As Boolean
+17841:Function VerifyDOCTOPIC() As Boolean
+17861:Function VerifyCCODE() As Boolean
+17881:Function VerifySTITLE() As Boolean
+17901:Function VerifySECCODE() As Boolean
+17921:Function VerifyISSN() As Boolean
+17941:Function VerifyPAGES() As Boolean
+18017:Function VerifyPagecount() As Boolean
+18047:Public Function VerifySPONSOR() As Boolean
+18058:Function Verifyartdate(t As String) As Boolean
+18078:Function VerifyAHPDate(t As String) As Boolean
+18098:Sub SelectComboItem(cmbbox As ComboBox, op As String)
+18116:Private Sub setDates()
+18131:Public Sub ClearForm()
+18154:Public Sub config_form(conf As clsConfig, issueL As clsIssueList, journal_list As clsJournalList, attl As clsAttrList)
+18218:Sub load_data(issue_data As clsIssue, doc_data As ClsDocData)
+18242:Sub load_doc_data(doc_data As ClsDocData)
+18273:Sub load_issue_data(issue As clsIssue)
+18312:Function issues_list() As Collection
+18323:Private Sub loadIssueList(list As Collection)
+18335:Private Function listbox_read(ByRef ListBox_type As ListBox) As String
+18347:Private Sub listbox_load(cb As ListBox, att As clsAttribute)
+18358:Private Sub listbox_select_items(ByRef ListBox_type As ListBox, text As String)
+18376:Private Sub combo_load(ByRef cb As ComboBox, ByRef att As clsAttribute)
+18398:Function get_doc_data() As ClsDocData
+18428:Function get_issue_data() As clsIssue
+18449:Function get_journal_data() As ClsJournal
+18474:Public Sub InsertAttr(a As clsAttribute, Optional k As String = "")
+18500:Public Function find_attr(k As String) As clsAttribute
+18509:Public Function ReturnAttr(k As String) As clsAttribute
+18519:Public Function ReturnCount() As Integer
+18536:Public Sub LoadAttributes(conf As clsConfig)
+18542:Public Sub read_file(conf As clsConfig, filename As String)
+18626:Public Function abbr_value(attr_name As String, ext_value As String) As String
+18635:Public Function ext_value(attr_name As String, abbr As String) As String
+18655:Sub writelogFile(msg As String)
+18674:Sub createlogFile(filename As String)
+18688:Sub updatelogFile(filename As String)
+18723:Function createXMLFile(xmlcontent As String, xmlfile As String) As Boolean
+18756:Public Function validateXMLFile(xmlfilename As String, xsdFileName As String, errorFileName As String, errorMsg As String) As Boolean
+18798:Public Function transformXMLFile(xmlfilename As String, ByVal xslFileName As String, ByVal validateXML As Boolean, ByVal errorFileName As String, Optional TransformationResultFileName As String) As String
+18830:Public Sub insertProcessingInstruction(xml As String, ByVal encoding As String)
+18848:Private Function loadXSL(xslFileName As String) As Boolean
+18862:Private Function transform(par_xmlFileName As String, par_xslFileName As String, ByVal transfErrorFileName As String, Optional resultFileName As String) As String
+18917:Public Function request(standard As String, references As String, Optional error As String) As String
+18946:Public Function request(standard As String, references As String, Optional ByRef error As Long) As String
+19069:Function getReferencesIdentified(Service As Object, standard As String, references As String, parlogfile As clsLogFile) As String
+19146:Sub MarkReferences(ByRef referencesblock As range, insertMainTag As Boolean)
+19192:Private Sub insertReferences(sectitle As range, referencesrange As range, strReferencesMarked As String, count As Long, Optional dodebug As Boolean)
+19219:Private Function convert_references_xml2sgml(xmlreferences As String) As String
+19239:Private Sub Class_Initialize()
+19259:Private Function colore(ByRef r As range)
+19337:Private Function colore_tag(ByRef r As range, tag As String, color As WdColor) As Boolean
+19398:Private Function formatMarks(ByRef r As range)
+19499:Private Sub FormatText(txt As range, color As WdColor)
+19539:Sub add(ref As clsRef)
+19542:Function item(i As Long) As clsRef
+19545:Function count() As Long
+19549:Sub Remove(index As Long)
+19554:Public Sub storeReferences(filename As String)
+19559:Function getReferencesText() As String
+19583:Sub loadRefList(filename As String)
+19609:Sub loadRefListFromString(referencesText As String)
+19655:Sub insertNewItems(n As clsRefList)
+19690:Sub ExecuteShellScript(dir As String, batch As String, parameters As String, Optional ctrlFileName As String, Optional logfile As clsLogFile)
+19752:Public Sub sort_list(ByRef list As Collection)
+19779:Function format_parameter(s As String) As String
+19801:Sub Clear()
+19810:Sub SetFormHeight(i As Integer)
+19872:Private Sub CommandButton_cancel_Click()
+19891:Private Sub CommandButton_OK_Click()
+19913:Private Sub Image1_Click()
+19917:Private Sub UserForm_Terminate()
+19935:Public Function VerifyFrmAttribute() As Boolean
+19965:Function VerifyTB_A(i As Integer, conf As clsConfig) As Boolean
+19985:Function VerifyCB_A(i As Integer, conf As clsConfig) As Boolean
+20019:Public Function TestAttribute(v As String, conf As clsConfig, Optional text As TextBox, Optional combo As ComboBox) As Boolean
+20070:Public Function VerifyDateValue(d As String) As Boolean
+20124:Public Function VerifyDateValueOld(d As String) As Boolean
+20153:Function VerifyDATEISO(t As TextBox, conf As clsConfig) As Boolean
+20188:Function VerifyROLE(c As ComboBox, conf As clsConfig) As Boolean
+20209:Function VerifyRID(t As TextBox, conf As clsConfig) As Boolean
+20281:Function VerifyTYPE(c As ComboBox, conf As clsConfig) As Boolean
+20302:Function VerifyLANGUAGE(c As ComboBox, conf As clsConfig) As Boolean
+20322:Function VerifyID(t As TextBox, conf As clsConfig) As Boolean
+20376:Private Function check_id(ByVal tag As String, ByVal value As String) As Boolean
+20401:Function VerifySCHEME(c As ComboBox, conf As clsConfig) As Boolean
+20422:Function VerifyFROM(t As TextBox, conf As clsConfig) As Boolean
+20456:Function VerifyTO(t As TextBox, conf As clsConfig) As Boolean
+20499:Function VerifySTANDARD(c As ComboBox, conf As clsConfig) As Boolean
+20520:Function VerifyCOUNT(t As TextBox, conf As clsConfig) As Boolean
+20549:Function VerifyNO(t As TextBox, conf As clsConfig) As Boolean
+20612:Function VerifyORGNAME(t As TextBox, conf As clsConfig) As Boolean
+20633:Function VerifyORGDIV(i As Integer, t As TextBox, conf As clsConfig) As Boolean
+20666:Function exist_journal_standard_configuration_file() As Boolean
+20670:Function exist_journals_file() As Boolean
+20676:Function load() As Boolean
+20783:Function journal_by_issn_id(issn_id As String) As ClsJournal
+20795:Function journal_by_title(journal_title As String) As ClsJournal
+20818:Function existFile(file As String) As Boolean
+20830:Function DeleteFile(file As String) As Boolean
+20841:Sub writeFile(filename As String, msg As String)
+20850:Function readfile(filename As String, Optional dodebug As Boolean = True) As String
+20870:Function makedir(path As String) As Boolean
+20890:Function get_dirname(path As String) As String
+20898:Function get_basename(path As String) As String
+20902:Sub normalize_path(ByRef path As String)
+20912:Function is_dir(ByVal path As String) As Boolean
+20920:Function is_file(ByVal path As String) As Boolean
+20928:Function delete_path(path As String) As Boolean
+20960:Private Function getUnmarkedFileName() As String
+20963:Private Function getMarkedFileName() As String
+20967:Public Sub store()
+20972:Public Sub load(markupfilename As String)
+20982:Public Function recoverUnmarkedReference(markedReference As String) As String
+20996:Sub insertMostRecentReferences(unmarked As String, marked As String)
+21049:Public Function generateXML() As String
+21097:Function missing() As String
+21138:Function getStandard(standard As String) As ClsStandard
+21152:Private Function get_standard_automata_file_standard(standard As String) As String
+21165:Private Function get_standard_automata_file_refs(standard As String) As String
+21178:Private Function get_tag_labels_file(standard As String) As String
+21199:Private Function get_citat_tag_name(standard As String) As String
+21221:Private Function get_standard_tag_name(standard As String) As String
+21251:Function convert(SGML_text As String, cTable As ClsConversionTable) As String
+21282:Private Sub insertProcessingInstruction(xml As String, encoding As String)
+21293:Private Function removeBadCharacters(text As String) As String
+21313:Private Function call_putAttributesBetweenQuotes(SGML_text As String) As String
+21337:Private Function convertSGML2XML(SGML_text As String) As String
+21362:Private Function findNextOpenTagWithAttributes(text As String, p As Long) As String
+21391:Private Function putAttributesBetweenQuotes(ByVal text As String) As String
+21430:Private Function findNextOpenTag(text As String, p As Long) As String
+21447:Private Function utf8_encode(s As String) As String
+21466:Public Sub LoadDics(conf As clsConfig)
+21522:Public Function ReturnFieldDDic(key As Integer) As clsDConvField
+21526:Public Function ReturnFieldIDic(key As Integer) As clsIConvField
+21530:Public Function ReturnTagAttr1_2(key As Integer) As String
+21534:Public Function ReturnCountDDic() As Integer
+21538:Public Function ReturnCountIDic() As Integer
+21542:Public Function ReturnCountTagsAttr1_2() As Integer
+21571:Private Sub init_filenames()
+21651:Sub init_class(ByRef Markup As clsMarkup, ByRef par_sgmlChars As ClsConversionTable, markupfile As String)
+21658:Function getErrFilename() As String
+21662:Function getTextFilename() As String
+21666:Function getContentReportFilename() As String
+21670:Function getReportFilename() As String
+21674:Function getPMCTextFilename() As String
+21678:Function getPMCReportFilename() As String
+21682:Public Function generate(ByVal extraXML As String, acron As String, ByRef errFilename As String, ByRef parlogfile As clsLogFile) As Boolean
+21728:Private Function insertExtraXML(xml As String, extraXML As String) As String
+21740:Private Function convertHTML2SGMLXML(markup_filename As String, ByRef sgmlChars As ClsConversionTable, extraXML As String, ByRef logfile As clsLogFile) As String
+21771:Private Sub display_msg(s As String)
+21774:Sub create_work_path()
+21786:Private Function convertTemplate2html() As Boolean
+21889:Private Sub saveas(fname As String, Optional ftype As WdSaveFormat = wdFormatFilteredHTML)
+21894:Private Sub save_as_html(fname As String)
+21907:Private Sub save_as_filteredhtml(fname As String)
+21923:Private Function PythonGenerateAndCheckXML(ByRef xmlfile As String, acron As String, ByRef errorFileName As String, logfile As clsLogFile) As Boolean
+21959:Private Function format_parameter(s As String) As String
+21982:Public Function getMessage(msg As String) As String
+21995:Public Sub addParam(value As String)
+22002:Public Sub resetParameters()
+22014:Private Sub CommandButton1_Click()
+22019:Private Sub CommandButton2_Click()
+22029:Private Sub UserForm_Initialize()
+22055:Private Sub UserForm_Terminate()
+22069:Function getStyle(i As Long) As String
+22072:Function load_data(ByRef original() As String, ByRef style() As String, c As Long) As Boolean
+22103:Function change() As Boolean
+22127:Private Sub CommandApply_Click()
+22133:Private Sub CommandCancel_Click()
+22138:Private Sub CommandChange_Click()
+22151:Function get_rid_prefix(rid As String) As String
+22169:Sub load_xrefinfo()
+22209:Function get_reftype(rid As String) As String
+22230:Function get_id_prefix(ByVal button As String, Optional content As String) As String
+22260:Function is_valid_id(ByVal button As String, ByVal value As String) As Boolean
+22292:Function is_doi(ByVal text_range As range) As Boolean
+22309:Function is_toctitle(text_range As range) As Boolean
+22323:Function is_doctitle(text_range As range) As Boolean
+22328:Function is_abstract(text_range As range) As Boolean
+22333:Function is_xmlabstract(text_range As range) As Boolean
+22341:Sub split_license(ByVal license_url As String, ByRef license_type As String, ByRef license_version As String, ByRef license_complement As String, ByRef license_label As String)
+22377:Function is_lower_case(text As String) As Boolean
+22380:Sub set_comma_or_semicolon()
+22394:Function fix_search_expr(e As String) As String
+22448:Private Sub CmdUrlTest_Click()
+22454:Private Sub ComboBox_journal_title_Change()
+22460:Private Sub CommandButton_cancel_Click()
+22475:Private Sub CommandButton_OK_Click()
+22495:Private Sub update_journals_list()
+22569:Private Sub CommandButton1_Click()
+22573:Private Sub CommandButtonClear_Click()
+22577:Private Sub Frame1_Click()
+22581:Private Sub TextBox_ahpdate_Enter()
+22585:Private Sub TextBox_ahppid_Enter()
+22589:Private Sub TextBox_artdate_Enter()
+22593:Private Sub TextBox_dateiso_Enter()
+22597:Private Sub TextBox_elocatid_Enter()
+22601:Private Sub textbox_fpageseq_enter()
+22605:Private Sub TextBox_issueno_enter()
+22608:Private Sub TextBox_idpart_enter()
+22611:Private Sub TextBox_license_Enter()
+22615:Private Sub TextBox_order_enter()
+22619:Private Sub TextBox_sps_enter()
+22623:Private Sub TextBox_season_Enter()
+22627:Private Sub TextBox_supplno_Enter()
+22631:Private Sub TextBox_supplvol_Enter()
+22635:Private Sub Frame_ahpdate_Click()
+22639:Private Sub Frame_ahppid_Click()
+22643:Private Sub Frame_artdate_Click()
+22647:Private Sub Frame_dateiso_Click()
+22651:Private Sub Frame_elocatid_Click()
+22655:Private Sub textbox_fpageseq_Click()
+22659:Private Sub Frame_issueno_Click()
+22662:Private Sub Frame_idpart_Click()
+22665:Private Sub Frame_license_Click()
+22669:Private Sub Frame_sps_Click()
+22673:Private Sub Frame_order_Click()
+22677:Private Sub Frame_season_Click()
+22681:Private Sub Frame_supplno_Click()
+22685:Private Sub Frame_supplvol_Click()
+22689:Private Sub UserForm_Terminate()
+22704:Public Function verify_required(obj As Object, text As String, label As String) As Boolean
+22723:Public Function verify_required_number(obj As Object, text As String, label As String) As Boolean
+22741:Public Function VerifyFrmArticle() As Boolean
+22845:Public Function VerifyDateValue(d As String, label As String) As Boolean
+22883:Sub SelectComboItem(cmbbox As ComboBox, op As String)
+22896:Public Sub config_form(conf As clsConfig, issueL As clsIssueList, journal_list As clsJournalList, attl As clsAttrList)
+22967:Sub load_data(journal_data As ClsJournal, issue_data As clsIssue, doc_data As ClsDocData)
+22981:Sub load_doc_data(doc_data As ClsDocData)
+23001:Sub load_issue_data(issue As clsIssue)
+23023:Sub load_journal_data(journal As ClsJournal)
+23053:Private Sub combo_load(ByRef cb As ComboBox, ByRef att As clsAttribute)
+23073:Function get_doc_data() As ClsDocData
+23106:Function get_issue_data() As clsIssue
+23122:Function get_journal_data() As ClsJournal
+23140:Sub clean_form()
+23203:Sub select_combobox_item(cb As ComboBox, value As String)
+23211:Private Sub ComboBox_api_result_Change()
+23215:Private Sub check_selected_wayta_result()
+23249:Private Sub CommandButtonCancel_Click()
+23254:Private Sub CommandButtonOK_Click()
+23277:Sub display_search_result(items As Collection, ComboBox1 As ComboBox)
+23287:Function wayta_query(text As String) As Collection
+23339:Sub SearchWayta(expr As String)
+23350:Private Sub CommandButtonSearchWayta_Click()
+23369:Sub load_form()
+23378:Function change() As Boolean
+23411:Private Sub CommandApply_Click()
+23416:Private Sub CommandCancel_Click()
+23421:Private Sub CommandChange_Click()
+23436:Private Sub cmdbutton_Click()
+23441:Private Sub UserForm_Initialize()
+23525:Private Sub fix_text_and_abbrev(attr_name As String, ByRef text As String, ByRef abbrev As String, attrl As clsAttrList)
+23539:Public Sub complete_text_and_abbrev(attrl As clsAttrList, issue As clsIssue)
+23581:Public Function list_abbr(att As clsAttribute, text As String) As String
+23591:Public Function list_text(att As clsAttribute, abbr As String) As String
+23602:Sub pages_to_fpage_and_lpage()
+23621:Private Sub CommandButton1_Click()
+23626:Private Sub CommandButton2_Click()
+23630:Private Sub UserForm_Initialize()
