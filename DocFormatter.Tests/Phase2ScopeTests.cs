@@ -11,16 +11,17 @@ namespace DocFormatter.Tests;
 public sealed class Phase2ScopeTests
 {
     [Fact]
-    public void Current_AtTask06Snapshot_ContainsStableStage1TagsAndTask06Tags()
+    public void Current_AtTask07Snapshot_ContainsStableStage1TagsAndTaskEmitterTags()
     {
-        // Task 06 reset the in-scope set to "tags whose attributes are stable
-        // between produced and expected at this release point". `author` and
-        // `xref` are dropped from the Stage-1 baseline because their
-        // attributes / occurrences differ between before/<id>.docx and
-        // after/<id>.docx (task 07 owns those changes). The two new emitter
-        // tags `kwdgrp` and `xmlabstr` join the set.
+        // Task 07 adds three tags to scope: `xref`, `authorid`, `corresp` —
+        // the structures EmitAuthorXrefsRule and EmitCorrespTagRule now own.
+        // `author`, `fname`, `surname` and `normaff` remain OUT of scope per
+        // ADR-001 anti-duplication: SciELO Markup auto-marks them. The diff
+        // peels them symmetrically and aligns on the inner plain text.
         var expected = new HashSet<string>(StringComparer.Ordinal)
         {
+            "authorid",
+            "corresp",
             "doc",
             "doctitle",
             "doi",
@@ -29,6 +30,7 @@ public sealed class Phase2ScopeTests
             "normaff",
             "toctitle",
             "xmlabstr",
+            "xref",
         };
 
         Assert.Equal(expected, Phase2Scope.Current);
@@ -37,17 +39,13 @@ public sealed class Phase2ScopeTests
     [Fact]
     public void Current_OmitsTagsOwnedByLaterReleases()
     {
-        // Tasks 07 / 09 each append the release tags they emit (and re-add
-        // tags whose structure they finally fix, e.g. author / xref / fname /
-        // surname). Until those tasks land the cumulative set must NOT
-        // advertise them — otherwise the diff gate would surface their gaps
-        // as false mismatches at task 06.
+        // Anti-duplication tags (Markup auto-marks them). Phase 2 must not
+        // pre-emit them and the diff peels them symmetrically.
         Assert.DoesNotContain("author", Phase2Scope.Current);
         Assert.DoesNotContain("fname", Phase2Scope.Current);
         Assert.DoesNotContain("surname", Phase2Scope.Current);
-        Assert.DoesNotContain("xref", Phase2Scope.Current);
-        Assert.DoesNotContain("authorid", Phase2Scope.Current);
-        Assert.DoesNotContain("corresp", Phase2Scope.Current);
+
+        // Task 09 (Phase 4) ownership.
         Assert.DoesNotContain("hist", Phase2Scope.Current);
         Assert.DoesNotContain("histdate", Phase2Scope.Current);
         Assert.DoesNotContain("received", Phase2Scope.Current);

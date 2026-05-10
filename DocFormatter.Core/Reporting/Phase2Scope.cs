@@ -11,13 +11,12 @@ namespace DocFormatter.Core.Reporting;
 /// this release point.
 ///
 /// <para>
-/// Task 06 contents = Stage-1 content-stable baseline + the two new emitter
-/// tags. Note that <c>author</c> and <c>xref</c> are NOT in the set yet — their
-/// attributes (<c>rid</c>, <c>corresp</c>, <c>deceased</c>, <c>eqcontr</c>,
-/// the corresp / aff xref decomposition) are owned by task 07. Until task 07
-/// ships, including them in scope would surface task-07 gaps as task-06 diff
-/// failures. Once task 07 ships, it re-adds <c>author</c> and <c>xref</c>
-/// alongside <c>authorid</c> and <c>corresp</c>.
+/// Task 07 adds <c>xref</c>, <c>authorid</c>, and <c>corresp</c> — the three
+/// tags whose attributes/structure the new rules now control. <c>author</c>,
+/// <c>fname</c>, <c>surname</c> and <c>normaff</c> remain OUT of scope per
+/// ADR-001 anti-duplication: SciELO Markup auto-marks them and Phase 2 must
+/// not pre-mark. The symmetric content-keep strip handles those tags by
+/// peeling wrappers on both sides; the diff aligns on the inner plain text.
 /// </para>
 ///
 /// <para>
@@ -30,13 +29,7 @@ public static class Phase2Scope
     public static readonly IReadOnlySet<string> Current = new HashSet<string>(StringComparer.Ordinal)
     {
         // Stage-1 baseline whose structure already matches between
-        // before/<id>.docx and after/<id>.docx (no Phase 3/4 attrs in flight).
-        // Note: fname / surname are intentionally NOT in scope yet. Several
-        // corpus articles (e.g. 5523) carry partially-tagged [fname]/[surname]
-        // pairs in the BEFORE that the AFTER decomposes differently — that
-        // tag-boundary churn is task 07's responsibility. Until task 07 ships
-        // we peel both wrappers symmetrically and let the diff align on
-        // plain-text content.
+        // before/<id>.docx and after/<id>.docx (no Phase 4 attrs in flight).
         "doc",
         "doctitle",
         "doi",
@@ -47,5 +40,10 @@ public static class Phase2Scope
         // Task 06 emitters.
         "kwdgrp",
         "xmlabstr",
+
+        // Task 07 emitters / patches.
+        "authorid",
+        "corresp",
+        "xref",
     };
 }

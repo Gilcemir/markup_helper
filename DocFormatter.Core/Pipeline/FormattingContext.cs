@@ -49,4 +49,12 @@ public sealed class FormattingContext
     public AbstractMarker? Abstract { get; set; }
 
     public KeywordsGroup? Keywords { get; set; }
+
+    // Phase 3 cross-rule references (task 07). Affiliations is the parsed
+    // [normaff id="aff…"] / [xref ref-type="aff" rid="aff…"] inventory that
+    // EmitAuthorXrefsRule discovers in the body; CorrespAuthor is the wrap
+    // target for EmitCorrespTagRule. Both are nullable per ADR-002.
+    public IReadOnlyList<Affiliation>? Affiliations { get; set; }
+
+    public CorrespAuthor? CorrespAuthor { get; set; }
 }

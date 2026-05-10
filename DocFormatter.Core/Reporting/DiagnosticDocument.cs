@@ -53,7 +53,81 @@ public sealed record DiagnosticDocument(
 public sealed record DiagnosticPhase2(
     DiagnosticField Elocation,
     DiagnosticField Abstract,
-    DiagnosticField Keywords);
+    DiagnosticField Keywords,
+    DiagnosticField Corresp,
+    IReadOnlyList<DiagnosticAuthorXref> Xref)
+{
+    public bool Equals(DiagnosticPhase2? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return Elocation.Equals(other.Elocation)
+            && Abstract.Equals(other.Abstract)
+            && Keywords.Equals(other.Keywords)
+            && Corresp.Equals(other.Corresp)
+            && Xref.SequenceEqual(other.Xref);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Elocation);
+        hash.Add(Abstract);
+        hash.Add(Keywords);
+        hash.Add(Corresp);
+        foreach (var xref in Xref)
+        {
+            hash.Add(xref);
+        }
+        return hash.ToHashCode();
+    }
+}
+
+public sealed record DiagnosticAuthorXref(
+    int AuthorIndex,
+    IReadOnlyList<string> Affiliations,
+    bool Corresp,
+    bool HasAuthorid)
+{
+    public bool Equals(DiagnosticAuthorXref? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return AuthorIndex == other.AuthorIndex
+            && Corresp == other.Corresp
+            && HasAuthorid == other.HasAuthorid
+            && Affiliations.SequenceEqual(other.Affiliations, StringComparer.Ordinal);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(AuthorIndex);
+        hash.Add(Corresp);
+        hash.Add(HasAuthorid);
+        foreach (var aff in Affiliations)
+        {
+            hash.Add(aff, StringComparer.Ordinal);
+        }
+        return hash.ToHashCode();
+    }
+}
 
 public sealed record DiagnosticFormatting(
     DiagnosticAlignment? AlignmentApplied,

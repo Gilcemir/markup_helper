@@ -65,6 +65,63 @@ public sealed class Phase2PipelineIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void Run_Phase2_OnSyntheticThreeAuthorFixture_EmitsXrefAuthoridAndCorrespLiteralsInOrder()
+    {
+        var sourcePath = Path.Combine(_tempDir, "three-authors.docx");
+        WriteThreeAuthorFixture(sourcePath);
+
+        var exit = CliApp.Run(
+            new[] { "phase2", sourcePath },
+            new StringWriter(),
+            new StringWriter());
+
+        Assert.Equal(CliApp.ExitSuccess, exit);
+
+        var producedPath = Path.Combine(_tempDir, "formatted-phase2", "three-authors.docx");
+        Assert.True(File.Exists(producedPath));
+
+        var bodyText = ReadBodyText(producedPath);
+
+        // Author 1 (Alice, single aff, no corresp, ORCID).
+        Assert.Contains(
+            "[author role=\"nd\" rid=\"aff1\" corresp=\"n\" deceased=\"n\" eqcontr=\"nd\"]"
+                + "[fname]Alice[/fname] [surname]Smith[/surname]"
+                + "[xref ref-type=\"aff\" rid=\"aff1\"]1[/xref] "
+                + "[authorid authidtp=\"orcid\"]0000-0000-0000-0001[/authorid][/author]",
+            bodyText);
+
+        // Author 2 (Bob, corresp author, plain `1*` trailer expanded).
+        Assert.Contains(
+            "[author role=\"nd\" rid=\"aff1\" corresp=\"y\" deceased=\"n\" eqcontr=\"nd\"]"
+                + "[fname]Bob[/fname] [surname]Johnson[/surname]"
+                + "[xref ref-type=\"aff\" rid=\"aff1\"]1[/xref]"
+                + "[xref ref-type=\"corresp\" rid=\"c1\"]*[/xref]"
+                + "[authorid authidtp=\"orcid\"]0000-0000-0000-0002[/authorid][/author]",
+            bodyText);
+
+        // Author 3 (Carol, multi-aff, no corresp, ORCID).
+        Assert.Contains(
+            "[author role=\"nd\" rid=\"aff1 aff2\" corresp=\"n\" deceased=\"n\" eqcontr=\"nd\"]"
+                + "[fname]Carol[/fname] [surname]Davis[/surname]"
+                + "[xref ref-type=\"aff\" rid=\"aff1\"]1[/xref]"
+                + "[xref ref-type=\"aff\" rid=\"aff2\"]2[/xref] "
+                + "[authorid authidtp=\"orcid\"]0000-0000-0000-0003[/authorid][/author]",
+            bodyText);
+
+        // Corresp paragraph wrapped.
+        Assert.Contains("[corresp id=\"c1\"]* E-mail: bob@example.com[/corresp]", bodyText);
+
+        // Order: authors precede corresp.
+        var alice = bodyText.IndexOf("[fname]Alice", StringComparison.Ordinal);
+        var bob = bodyText.IndexOf("[fname]Bob", StringComparison.Ordinal);
+        var carol = bodyText.IndexOf("[fname]Carol", StringComparison.Ordinal);
+        var corresp = bodyText.IndexOf("[corresp", StringComparison.Ordinal);
+        Assert.InRange(alice, 0, bob);
+        Assert.InRange(bob, 0, carol);
+        Assert.InRange(carol, 0, corresp);
+    }
+
+    [Fact]
     public void Run_Phase2_DiagnosticJsonContainsPhase2BlockWithThreeFields()
     {
         var sourcePath = Path.Combine(_tempDir, "diag.docx");
@@ -92,6 +149,30 @@ public sealed class Phase2PipelineIntegrationTests : IDisposable
         Assert.Contains("\"elocation\"", json);
         Assert.Contains("\"abstract\"", json);
         Assert.Contains("\"keywords\"", json);
+    }
+
+    private static void WriteThreeAuthorFixture(string path)
+    {
+        using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
+        var mainPart = doc.AddMainDocumentPart();
+        var body = new Body(
+            BuildPlainParagraph(DocOpening),
+            BuildPlainParagraph(
+                "[author role=\"nd\"][fname]Alice[/fname] [surname]Smith[/surname]"
+                + "[xref ref-type=\"aff\" rid=\"aff1\"]1[/xref] 0000-0000-0000-0001[/author]"),
+            BuildPlainParagraph(
+                "[author role=\"nd\"][fname]Bob[/fname] [surname]Johnson[/surname]"
+                + "1*0000-0000-0000-0002[/author]"),
+            BuildPlainParagraph(
+                "[author role=\"nd\"][fname]Carol[/fname] [surname]Davis[/surname]"
+                + "[xref ref-type=\"aff\" rid=\"aff1\"]1[/xref]"
+                + "[xref ref-type=\"aff\" rid=\"aff2\"]2[/xref] 0000-0000-0000-0003[/author]"),
+            BuildPlainParagraph("* E-mail: bob@example.com"),
+            BuildPlainParagraph("e51362627"),
+            BuildPlainParagraph("Abstract"),
+            BuildPlainParagraph("Body of the abstract."),
+            BuildPlainParagraph("Keywords: K1, K2, K3"));
+        mainPart.Document = new Document(body);
     }
 
     private static void WriteSynthetic(string path)

@@ -215,14 +215,14 @@ public sealed class CliPhase2Tests : IDisposable
     }
 
     [Fact]
-    public void Run_Phase2Verify_OutOfScopeTagInAfterHasBracketsStrippedSymmetrically_PassesAtTask06Scope()
+    public void Run_Phase2Verify_OutOfScopeTagInAfterHasBracketsStrippedSymmetrically_PassesAtTaskScope()
     {
-        // After task 06 the strip is symmetric and content-preserving: an
-        // out-of-scope pair has its brackets removed but its content stays.
-        // Build before/after such that produced (= before, since none of the
-        // Phase 2 rules' heuristics trigger here) equals after AFTER stripping
-        // the out-of-scope `[corresp]` brackets from BOTH sides. `corresp` is
-        // not in the task 06 scope (task 07 owns it).
+        // The strip is symmetric and content-preserving: an out-of-scope pair
+        // has its brackets removed but its content stays. Build before/after
+        // such that produced (= before, since none of the Phase 2 rules'
+        // heuristics trigger here) equals after AFTER stripping the
+        // out-of-scope `[fname]` brackets from BOTH sides. `fname` is not in
+        // the cumulative scope (anti-duplication, ADR-001).
         var beforeDir = Path.Combine(_tempDir, "before");
         var afterDir = Path.Combine(_tempDir, "after");
         Directory.CreateDirectory(beforeDir);
@@ -231,7 +231,7 @@ public sealed class CliPhase2Tests : IDisposable
         WritePlainDocx(Path.Combine(beforeDir, "id.docx"), "alpha beta gamma");
         WritePlainDocx(
             Path.Combine(afterDir, "id.docx"),
-            "alpha [corresp id=\"c1\"]beta[/corresp] gamma");
+            "alpha [fname]beta[/fname] gamma");
 
         var stdout = new StringWriter();
         var exit = CliApp.Run(

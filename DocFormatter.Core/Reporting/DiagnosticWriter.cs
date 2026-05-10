@@ -69,10 +69,14 @@ public static class DiagnosticWriter
         var elocationEntries = FilterByRule(report, nameof(EmitElocationTagRule));
         var abstractEntries = FilterByRule(report, nameof(EmitAbstractTagRule));
         var keywordsEntries = FilterByRule(report, nameof(EmitKwdgrpTagRule));
+        var correspEntries = FilterByRule(report, nameof(EmitCorrespTagRule));
+        var authorXrefEntries = FilterByRule(report, nameof(EmitAuthorXrefsRule));
 
         if (elocationEntries.Count == 0
             && abstractEntries.Count == 0
-            && keywordsEntries.Count == 0)
+            && keywordsEntries.Count == 0
+            && correspEntries.Count == 0
+            && authorXrefEntries.Count == 0)
         {
             return null;
         }
@@ -80,7 +84,44 @@ public static class DiagnosticWriter
         return new DiagnosticPhase2(
             Elocation: BuildElocationDiagnostic(ctx, elocationEntries),
             Abstract: BuildAbstractDiagnostic(ctx, abstractEntries),
-            Keywords: BuildKeywordsDiagnostic(ctx, keywordsEntries));
+            Keywords: BuildKeywordsDiagnostic(ctx, keywordsEntries),
+            Corresp: BuildCorrespDiagnostic(ctx, correspEntries),
+            Xref: BuildAuthorXrefDiagnostic(ctx, authorXrefEntries));
+    }
+
+    private static DiagnosticField BuildCorrespDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.CorrespAuthor is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        var summary = ctx.CorrespAuthor.Email ?? ctx.CorrespAuthor.Orcid ?? "c1";
+        return new DiagnosticField(summary, FieldConfidence.High);
+    }
+
+    private static IReadOnlyList<DiagnosticAuthorXref> BuildAuthorXrefDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.Authors.Count == 0)
+        {
+            return Array.Empty<DiagnosticAuthorXref>();
+        }
+
+        var result = new List<DiagnosticAuthorXref>(ctx.Authors.Count);
+        for (var i = 0; i < ctx.Authors.Count; i++)
+        {
+            var author = ctx.Authors[i];
+            result.Add(new DiagnosticAuthorXref(
+                AuthorIndex: i,
+                Affiliations: author.AffiliationLabels.ToArray(),
+                Corresp: ctx.CorrespondingAuthorIndex == i,
+                HasAuthorid: !string.IsNullOrEmpty(author.OrcidId)));
+        }
+        return result;
     }
 
     private static DiagnosticField BuildElocationDiagnostic(

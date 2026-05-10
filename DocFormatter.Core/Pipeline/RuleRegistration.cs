@@ -40,6 +40,15 @@ public static class RuleRegistration
         services.AddTransient<IFormattingRule, EmitAbstractTagRule>();
         services.AddTransient<IFormattingRule, EmitKwdgrpTagRule>();
 
+        // Task 07 emitters. EmitAuthorXrefsRule must run before
+        // EmitCorrespTagRule because the corresp emitter wraps the corresp
+        // paragraph (ID c1) and the author rule populates ctx with the
+        // corresp index that the diagnostic block exposes. Either order works
+        // semantically — the rules touch disjoint paragraphs — but author
+        // first matches the corpus paragraph order.
+        services.AddTransient<IFormattingRule, EmitAuthorXrefsRule>();
+        services.AddTransient<IFormattingRule, EmitCorrespTagRule>();
+
         return services;
     }
 }
