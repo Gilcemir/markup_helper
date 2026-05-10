@@ -1,7 +1,6 @@
 using System.Reflection;
 using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
-using DocFormatter.Core.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -203,17 +202,7 @@ internal static class CliApp
 
         services.AddTransient<IReport, Report>();
 
-        services.AddTransient<IFormattingRule, ExtractTopTableRule>();
-        services.AddTransient<IFormattingRule, ParseHeaderLinesRule>();
-        services.AddTransient<IFormattingRule, ExtractAuthorsRule>();
-        services.AddTransient<IFormattingRule, ExtractCorrespondingAuthorRule>();
-        services.AddTransient<IFormattingRule, RewriteHeaderMvpRule>();
-        services.AddTransient<IFormattingRule, ApplyHeaderAlignmentRule>();
-        services.AddTransient<IFormattingRule, EnsureAuthorBlockSpacingRule>();
-        services.AddTransient<IFormattingRule, RewriteAbstractRule>();
-        services.AddTransient<IFormattingRule, LocateAbstractAndInsertElocationRule>();
-        services.AddTransient<IFormattingRule, MoveHistoryRule>();
-        services.AddTransient<IFormattingRule, PromoteSectionsRule>();
+        services.AddPhase1Rules();
 
         services.AddTransient<FormattingPipeline>();
 
