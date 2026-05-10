@@ -185,8 +185,8 @@ Feature iniciada: <slug>
   Pasta: .compozy/tasks/<slug>/
 
 Próximo passo:
-  → /<cy-create-prd | cy-create-techspec>
-  → depois, /grill-me sobre o <PRD | TechSpec> gerado
+  → /<cy-create-prd | cy-create-techspec>  (use /grill-me em paralelo
+    para fechar gaps no documento à medida que ele é construído)
   → depois, /cy-create-tasks → /cy-execute-task (loop)
   → ao concluir, /promote-feature <slug>
 ```
