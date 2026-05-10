@@ -47,6 +47,27 @@ internal static class AuthorsParagraphFactory
     public static Hyperlink Hyperlink(string relationshipId, params OpenXmlElement[] children)
         => new(children) { Id = relationshipId };
 
+    // ADR-008 regression fixtures: reproduce the divergent shapes that pre-fix produced
+    // "1,*" / "1,2,*" superscripts in the formatted .docx and broke Markup's mark_authors.
+    // The factories take the affected author's name and emit the exact run sequence from
+    // the original 5313 / 5449 input so the rule is exercised end-to-end with the failure
+    // shape baked in.
+    public static OpenXmlElement[] Build5313FailureShape(string authorName)
+        => new OpenXmlElement[]
+        {
+            TextRun(authorName),
+            SuperscriptRun("1"),
+            SuperscriptRun("*"),
+        };
+
+    public static OpenXmlElement[] Build5449FailureShape(string authorName)
+        => new OpenXmlElement[]
+        {
+            TextRun(authorName),
+            SuperscriptRun("1,2"),
+            SuperscriptRun("*"),
+        };
+
     private static Paragraph BuildSection()
         => new(new Run(new Text(SectionText) { Space = SpaceProcessingModeValues.Preserve }));
 
