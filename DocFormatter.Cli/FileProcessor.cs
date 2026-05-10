@@ -23,13 +23,21 @@ internal sealed class FileProcessor
 {
     private readonly IServiceProvider _services;
     private readonly ILogger _logger;
+    private readonly string _outputSubdirName;
 
     public FileProcessor(IServiceProvider services, ILogger logger)
+        : this(services, logger, outputSubdirName: "formatted")
+    {
+    }
+
+    public FileProcessor(IServiceProvider services, ILogger logger, string outputSubdirName)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentException.ThrowIfNullOrEmpty(outputSubdirName);
         _services = services;
         _logger = logger;
+        _outputSubdirName = outputSubdirName;
     }
 
     public ProcessOutcome Process(string sourceFile)
@@ -43,7 +51,7 @@ internal sealed class FileProcessor
         }
 
         var name = Path.GetFileNameWithoutExtension(sourceFile);
-        var formattedDir = Path.Combine(sourceDir, "formatted");
+        var formattedDir = Path.Combine(sourceDir, _outputSubdirName);
         Directory.CreateDirectory(formattedDir);
 
         var copyPath = Path.Combine(formattedDir, $"{name}.docx");
