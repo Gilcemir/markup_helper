@@ -1,4 +1,5 @@
 using DocFormatter.Core.Rules;
+using DocFormatter.Core.Rules.Phase2;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DocFormatter.Core.Pipeline;
@@ -28,7 +29,16 @@ public static class RuleRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Phase 2 emitter rules are added by tasks 06 / 07 / 09.
+        // Task 06 emitters. Order: elocation first so it can detect and remove
+        // the standalone elocation paragraph before the abstract-heading
+        // search runs (the elocation paragraph sits immediately before the
+        // abstract heading in the corpus and would otherwise drift the
+        // FindFollowingNonEmptyParagraph heuristic). Abstract before kwdgrp
+        // mirrors corpus order; either order works because the two locators
+        // do not interfere.
+        services.AddTransient<IFormattingRule, EmitElocationTagRule>();
+        services.AddTransient<IFormattingRule, EmitAbstractTagRule>();
+        services.AddTransient<IFormattingRule, EmitKwdgrpTagRule>();
 
         return services;
     }

@@ -22,8 +22,21 @@ public sealed record DiffResult(
 /// <summary>
 /// Body-text comparator for the Phase 2 release gate (ADR-003 / ADR-006).
 /// Extracts a flat string from each <c>.docx</c> (preserving SciELO bracket-syntax
-/// tag literals verbatim), strips out-of-scope tag pairs from the expected side,
-/// and reports the first character-level divergence with surrounding context.
+/// tag literals verbatim), strips out-of-scope tag pairs symmetrically from both
+/// sides (brackets removed, content preserved recursively), normalizes incidental
+/// whitespace, and reports the first character-level divergence with surrounding
+/// context.
+///
+/// <para>
+/// Semantics of the strip (refined for task 06): an out-of-scope tag pair
+/// <c>[tag attr="v"]content[/tag]</c> is replaced by its recursively stripped
+/// content (the wrapping brackets and attribute list disappear, the inner text
+/// stays). This keeps cross-release content alignment intact: tags whose
+/// attributes are owned by future releases (e.g. <c>[author]</c>, <c>[xref]</c>
+/// before task 07) can be excluded from the in-scope set without losing the
+/// inner author name / ORCID / label text the diff is comparing. The strip runs
+/// over both produced and expected so the comparison is symmetric.
+/// </para>
 /// </summary>
 public static class Phase2DiffUtility
 {
@@ -37,6 +50,18 @@ public static class Phase2DiffUtility
         @"\s+",
         RegexOptions.Compiled);
 
+    private static readonly Regex SpacesAroundNewlinePattern = new(
+        @"[ \t]*\n[ \t]*",
+        RegexOptions.Compiled);
+
+    private static readonly Regex ConsecutiveNewlinesPattern = new(
+        @"\n+",
+        RegexOptions.Compiled);
+
+    private static readonly Regex HorizontalWhitespaceRunsPattern = new(
+        @"[ \t]+",
+        RegexOptions.Compiled);
+
     public static DiffResult Compare(
         string producedDocxPath,
         string expectedDocxPath,
@@ -46,9 +71,10 @@ public static class Phase2DiffUtility
         ArgumentException.ThrowIfNullOrEmpty(expectedDocxPath);
         ArgumentNullException.ThrowIfNull(inScopeTags);
 
-        var produced = ExtractBodyText(producedDocxPath);
+        var producedRaw = ExtractBodyText(producedDocxPath);
         var expectedRaw = ExtractBodyText(expectedDocxPath);
-        var expected = StripOutOfScope(expectedRaw, inScopeTags);
+        var produced = NormalizeForCompare(StripOutOfScope(producedRaw, inScopeTags));
+        var expected = NormalizeForCompare(StripOutOfScope(expectedRaw, inScopeTags));
 
         var divergence = FindFirstDivergenceOffset(produced, expected);
         if (divergence is null)
@@ -62,6 +88,22 @@ public static class Phase2DiffUtility
             FirstDivergenceOffset: offset,
             ProducedContext: SliceContext(produced, offset),
             ExpectedContext: SliceContext(expected, offset));
+    }
+
+    internal static string NormalizeForCompare(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        // Trim spaces immediately around newlines (the post-strip text often
+        // carries trailing spaces from inner [sectitle] / [p] content that the
+        // produced side does not have), collapse consecutive newlines (some
+        // corpus pairs keep an empty paragraph in the elocation slot, others
+        // don't — collapsing absorbs that asymmetry), and collapse runs of
+        // horizontal whitespace to a single space (peeled adjacent wrappers
+        // inside a paragraph can produce multi-space artifacts).
+        var withoutEdgeSpaces = SpacesAroundNewlinePattern.Replace(text, "\n");
+        var collapsedNewlines = ConsecutiveNewlinesPattern.Replace(withoutEdgeSpaces, "\n");
+        var collapsedSpaces = HorizontalWhitespaceRunsPattern.Replace(collapsedNewlines, " ");
+        return collapsedSpaces.Trim('\n').Trim();
     }
 
     internal static string ExtractBodyText(string docxPath)
@@ -144,14 +186,22 @@ public static class Phase2DiffUtility
         return TagPairPattern.Replace(text, match =>
         {
             var tag = match.Groups[1].Value;
+            var content = match.Groups[3].Value;
+            var strippedContent = StripOutOfScopeRecursive(content, inScope);
+
             if (!inScope.Contains(tag))
             {
-                return string.Empty;
+                // Out of scope: drop the brackets and attributes, keep the
+                // (recursively stripped) inner content. Owners of those tags
+                // are downstream releases — until they ship the diff still
+                // needs to align on the underlying text. Trim the content's
+                // edges so adjacent peeled wrappers (e.g. `[fname]X[/fname]
+                // [surname]Y[/surname]`) don't leave double-space artifacts
+                // that the produced side does not have.
+                return strippedContent.Trim();
             }
 
             var attrs = match.Groups[2].Value;
-            var content = match.Groups[3].Value;
-            var strippedContent = StripOutOfScopeRecursive(content, inScope);
             return string.Concat("[", tag, attrs, "]", strippedContent, "[/", tag, "]");
         });
     }

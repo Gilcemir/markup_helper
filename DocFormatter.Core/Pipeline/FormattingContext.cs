@@ -1,4 +1,5 @@
 using DocFormatter.Core.Models;
+using DocFormatter.Core.Models.Phase2;
 using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocFormatter.Core.Pipeline;
@@ -40,4 +41,12 @@ public sealed class FormattingContext
     public string? CorrespondingOrcid { get; set; }
 
     public int? CorrespondingAuthorIndex { get; set; }
+
+    // Phase 2 cross-rule references (task 06). Each emitter populates the
+    // matching field when it locates its target; downstream consumers (e.g.
+    // diagnostic builders) read whichever fields the upstream rules managed
+    // to fill. Null indicates skip-and-warn (ADR-002), not "rule did not run".
+    public AbstractMarker? Abstract { get; set; }
+
+    public KeywordsGroup? Keywords { get; set; }
 }

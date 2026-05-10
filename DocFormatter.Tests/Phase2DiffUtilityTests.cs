@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using DocFormatter.Core.Reporting;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -86,57 +85,59 @@ public sealed class Phase2DiffUtilityTests : IDisposable
     }
 
     [Fact]
-    public void StripOutOfScope_RemovesUnscopedPairAndKeepsScopedPair()
+    public void StripOutOfScope_OutOfScopePairKeepsContentDropsBrackets()
     {
+        // Task 06 strip semantics: an out-of-scope pair has its brackets and
+        // attributes removed but its content stays. This keeps cross-release
+        // text alignment intact for tags whose attribute changes are owned by
+        // a future task (e.g. [author], [authorid] before task 07 ships).
         var input = "[kwdgrp language=\"en\"]K1, K2[/kwdgrp][abstract]X[/abstract]";
 
         var result = Phase2DiffUtility.StripOutOfScope(input, new[] { "abstract" });
 
-        Assert.Equal("[abstract]X[/abstract]", result);
+        Assert.Equal("K1, K2[abstract]X[/abstract]", result);
     }
 
     [Fact]
-    public void StripOutOfScope_PreservesLeadingAndTrailingContextAroundStrippedPair()
+    public void StripOutOfScope_PreservesContentOfStrippedPair()
     {
         var input = "before [kwd]Y[/kwd] after";
 
         var result = Phase2DiffUtility.StripOutOfScope(input, Array.Empty<string>());
 
-        // The pair is replaced by the empty string; the surrounding spaces remain so
-        // operators can see exactly what bracket pair was stripped.
-        Assert.Equal("before  after", result);
+        Assert.Equal("before Y after", result);
     }
 
     [Fact]
-    public void StripOutOfScope_EmptyInScopeRemovesEveryRecognizedTagPair()
+    public void StripOutOfScope_EmptyInScopePeelsBracketsButKeepsAllContent()
     {
         var input = "before [hist][received]2024[/received][/hist] middle [abstract]X[/abstract] end";
 
         var result = Phase2DiffUtility.StripOutOfScope(input, Array.Empty<string>());
 
-        Assert.Equal("before  middle  end", result);
+        Assert.Equal("before 2024 middle X end", result);
     }
 
     [Fact]
-    public void StripOutOfScope_TagWithEqualsInsideAttributeValueIsStripped()
+    public void StripOutOfScope_TagWithEqualsInsideAttributeValueHasContentKept()
     {
         var input = "[histdate dateiso=\"20240101\"]Jan[/histdate]";
 
         var result = Phase2DiffUtility.StripOutOfScope(input, Array.Empty<string>());
 
-        Assert.Equal(string.Empty, result);
+        Assert.Equal("Jan", result);
     }
 
     [Fact]
-    public void StripOutOfScope_NestedScopedTagAroundUnscopedInner_StripsOnlyInner()
+    public void StripOutOfScope_NestedScopedTagAroundUnscopedInner_PeelsInnerBracketsKeepsContent()
     {
         // [abstract] is in scope; the inner [xref] is not. The outer pair is preserved
-        // and the recursive strip removes [xref]Z[/xref] from the body.
+        // and the recursive strip removes the [xref] brackets but keeps "Z".
         var input = "[abstract]A [xref]Z[/xref] B[/abstract]";
 
         var result = Phase2DiffUtility.StripOutOfScope(input, new[] { "abstract" });
 
-        Assert.Equal("[abstract]A  B[/abstract]", result);
+        Assert.Equal("[abstract]A Z B[/abstract]", result);
     }
 
     [Fact]
@@ -209,15 +210,15 @@ public sealed class Phase2DiffUtilityTests : IDisposable
     }
 
     [Fact]
-    public void Compare_OutOfScopeTagInExpectedIsStrippedBeforeMatching()
+    public void Compare_OutOfScopeTagWrappingSameContent_StripsBracketsAndMatches()
     {
-        // Produced has only the in-scope abstract pair. Expected has an out-of-scope
-        // [kwdgrp] pair sandwiching [abstract]X[/abstract]. With scope={abstract}, the
-        // strip removes [kwdgrp ...] from the expected side and the match holds.
-        var produced = WriteDocx("p.docx", "[abstract]X[/abstract]");
-        var expected = WriteDocx(
-            "e.docx",
-            "[kwdgrp language=\"en\"]K1, K2[/kwdgrp][abstract]X[/abstract]");
+        // Symmetric strip (task 06 semantics): produced has the same body
+        // text as expected, but expected has an extra [other] wrapper around
+        // the trailing word that produced does not have. With scope={abstract}
+        // the strip peels [other] brackets from expected (keeping content),
+        // and the produced side has no brackets to strip — they match.
+        var produced = WriteDocx("p.docx", "[abstract]X[/abstract] body");
+        var expected = WriteDocx("e.docx", "[abstract]X[/abstract] [other]body[/other]");
 
         var result = Phase2DiffUtility.Compare(produced, expected, new[] { "abstract" });
 
@@ -225,6 +226,23 @@ public sealed class Phase2DiffUtilityTests : IDisposable
             result.IsMatch,
             $"Expected match. Offset={result.FirstDivergenceOffset}; " +
             $"produced={result.ProducedContext}; expected={result.ExpectedContext}");
+    }
+
+    [Fact]
+    public void Compare_OutOfScopeTagInExpectedOnlyExposesContentMismatch()
+    {
+        // Out-of-scope content stays after strip (symmetric, content kept).
+        // Expected carries "K1, K2" content that produced lacks; the diff
+        // surfaces that gap rather than silently masking it.
+        var produced = WriteDocx("p.docx", "[abstract]X[/abstract]");
+        var expected = WriteDocx(
+            "e.docx",
+            "[kwdgrp language=\"en\"]K1, K2[/kwdgrp][abstract]X[/abstract]");
+
+        var result = Phase2DiffUtility.Compare(produced, expected, new[] { "abstract" });
+
+        Assert.False(result.IsMatch);
+        Assert.Equal(0, result.FirstDivergenceOffset);
     }
 
     [Fact]
@@ -270,18 +288,13 @@ public sealed class Phase2DiffUtilityTests : IDisposable
     [Fact]
     public void Compare_RealCorpusFileAgainstItselfWithFullScope_ReturnsIsMatchTrue()
     {
-        // Self-compare on a real corpus file. The Phase 2 release scope
-        // ({abstract, kwdgrp, elocation}) does NOT cover all bracket pairs already
-        // present in `before/<id>.docx` (e.g. [author], [doctitle], [normaff], [xref]
-        // appear from upstream Stage-1 markup). Per ADR-006, strip applies to the
-        // expected side only — so for self-compare to hold the in-scope set must
-        // include every tag-pair name the file actually contains. Discover the set
-        // dynamically so this test stays correct as the corpus evolves.
+        // Self-compare on a real corpus file. Even after task 06's symmetric
+        // strip + content-keep refinement, comparing a file to itself with
+        // any scope (including the empty set) must trivially hold: both sides
+        // produce the same stripped string, so the diff must match.
         var corpusPath = ResolveCorpusPath("5136.docx");
-        var bodyText = Phase2DiffUtility.ExtractBodyText(corpusPath);
-        var tagsInFile = ExtractTagPairNames(bodyText);
 
-        var result = Phase2DiffUtility.Compare(corpusPath, corpusPath, tagsInFile);
+        var result = Phase2DiffUtility.Compare(corpusPath, corpusPath, Array.Empty<string>());
 
         Assert.True(
             result.IsMatch,
@@ -315,21 +328,6 @@ public sealed class Phase2DiffUtilityTests : IDisposable
             () => Phase2DiffUtility.Compare(path, "", Array.Empty<string>()));
         Assert.Throws<ArgumentNullException>(
             () => Phase2DiffUtility.Compare(path, path, null!));
-    }
-
-    private static IReadOnlyCollection<string> ExtractTagPairNames(string text)
-    {
-        // Capture every opening or closing bracket-tag name regardless of nesting depth.
-        // The strip in Phase2DiffUtility recurses into the content of each in-scope match,
-        // so the discovery here must do the same — using the linear pair-pattern would
-        // miss tags nested inside an outer matched pair.
-        var pattern = new Regex(@"\[/?(\w+)", RegexOptions.Singleline);
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match match in pattern.Matches(text))
-        {
-            names.Add(match.Groups[1].Value);
-        }
-        return names;
     }
 
     private static string ResolveCorpusPath(string fileName)

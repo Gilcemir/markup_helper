@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using DocFormatter.Core.Models;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Rules;
+using DocFormatter.Core.Rules.Phase2;
 
 namespace DocFormatter.Core.Reporting;
 
@@ -59,7 +60,68 @@ public static class DiagnosticWriter
             ExtractedAt: TruncateToSeconds(extractedAt),
             Fields: BuildFields(ctx),
             Formatting: BuildFormatting(report),
-            Issues: BuildIssues(report));
+            Issues: BuildIssues(report),
+            Phase2: BuildPhase2(ctx, report));
+    }
+
+    private static DiagnosticPhase2? BuildPhase2(FormattingContext ctx, IReport report)
+    {
+        var elocationEntries = FilterByRule(report, nameof(EmitElocationTagRule));
+        var abstractEntries = FilterByRule(report, nameof(EmitAbstractTagRule));
+        var keywordsEntries = FilterByRule(report, nameof(EmitKwdgrpTagRule));
+
+        if (elocationEntries.Count == 0
+            && abstractEntries.Count == 0
+            && keywordsEntries.Count == 0)
+        {
+            return null;
+        }
+
+        return new DiagnosticPhase2(
+            Elocation: BuildElocationDiagnostic(ctx, elocationEntries),
+            Abstract: BuildAbstractDiagnostic(ctx, abstractEntries),
+            Keywords: BuildKeywordsDiagnostic(ctx, keywordsEntries));
+    }
+
+    private static DiagnosticField BuildElocationDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries))
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        return string.IsNullOrEmpty(ctx.ElocationId)
+            ? new DiagnosticField(null, FieldConfidence.Missing)
+            : new DiagnosticField(ctx.ElocationId, FieldConfidence.High);
+    }
+
+    private static DiagnosticField BuildAbstractDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.Abstract is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        return new DiagnosticField(ctx.Abstract.Language, FieldConfidence.High);
+    }
+
+    private static DiagnosticField BuildKeywordsDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.Keywords is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        var summary = string.Join(", ", ctx.Keywords.Keywords);
+        return new DiagnosticField(
+            string.IsNullOrEmpty(summary) ? ctx.Keywords.Language : summary,
+            FieldConfidence.High);
     }
 
     public static JsonSerializerOptions JsonOptions => SerializerOptions;

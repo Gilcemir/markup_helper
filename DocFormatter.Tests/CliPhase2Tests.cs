@@ -72,9 +72,11 @@ public sealed class CliPhase2Tests : IDisposable
         Assert.True(File.Exists(Path.Combine(phase2Dir, "alpha.report.txt")));
         Assert.True(File.Exists(Path.Combine(phase2Dir, "_app.log")));
 
-        // diagnostic.json is only written when a rule emits at warn-or-higher
-        // level. With the empty Phase 2 rule set at task 05, none do.
-        Assert.False(File.Exists(Path.Combine(phase2Dir, "alpha.diagnostic.json")));
+        // At task 06 the Phase 2 rule set has three emitters; a plain docx
+        // missing the elocation paragraph / abstract heading / keywords block
+        // triggers per-rule skip-and-warn (ADR-002), so diagnostic.json IS
+        // written.
+        Assert.True(File.Exists(Path.Combine(phase2Dir, "alpha.diagnostic.json")));
 
         // Phase 1's "formatted/" directory must NOT be created by phase2.
         Assert.False(Directory.Exists(Path.Combine(_tempDir, "formatted")));
@@ -213,21 +215,23 @@ public sealed class CliPhase2Tests : IDisposable
     }
 
     [Fact]
-    public void Run_Phase2Verify_OutOfScopeTagInAfterIsStrippedBeforeCompare_PassesAtTask05Scope()
+    public void Run_Phase2Verify_OutOfScopeTagInAfterHasBracketsStrippedSymmetrically_PassesAtTask06Scope()
     {
-        // Build before/after such that produced (= before with the empty Phase 2
-        // rule set) equals after AFTER stripping out-of-scope tags from after.
-        // The "kwdgrp" tag is NOT in Phase2Scope.Current at task 05, so the
-        // strip removes it from the expected side and the strings match.
+        // After task 06 the strip is symmetric and content-preserving: an
+        // out-of-scope pair has its brackets removed but its content stays.
+        // Build before/after such that produced (= before, since none of the
+        // Phase 2 rules' heuristics trigger here) equals after AFTER stripping
+        // the out-of-scope `[corresp]` brackets from BOTH sides. `corresp` is
+        // not in the task 06 scope (task 07 owns it).
         var beforeDir = Path.Combine(_tempDir, "before");
         var afterDir = Path.Combine(_tempDir, "after");
         Directory.CreateDirectory(beforeDir);
         Directory.CreateDirectory(afterDir);
 
-        WritePlainDocx(Path.Combine(beforeDir, "id.docx"), "abstract body");
+        WritePlainDocx(Path.Combine(beforeDir, "id.docx"), "alpha beta gamma");
         WritePlainDocx(
             Path.Combine(afterDir, "id.docx"),
-            "abstract body[kwdgrp language=\"en\"]K1, K2[/kwdgrp]");
+            "alpha [corresp id=\"c1\"]beta[/corresp] gamma");
 
         var stdout = new StringWriter();
         var exit = CliApp.Run(

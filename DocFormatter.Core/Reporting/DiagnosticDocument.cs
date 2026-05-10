@@ -8,7 +8,8 @@ public sealed record DiagnosticDocument(
     DateTime ExtractedAt,
     DiagnosticFields Fields,
     DiagnosticFormatting? Formatting,
-    IReadOnlyList<DiagnosticIssue> Issues)
+    IReadOnlyList<DiagnosticIssue> Issues,
+    DiagnosticPhase2? Phase2 = null)
 {
     public bool Equals(DiagnosticDocument? other)
     {
@@ -27,7 +28,8 @@ public sealed record DiagnosticDocument(
             && ExtractedAt.Equals(other.ExtractedAt)
             && Fields.Equals(other.Fields)
             && Equals(Formatting, other.Formatting)
-            && Issues.SequenceEqual(other.Issues);
+            && Issues.SequenceEqual(other.Issues)
+            && Equals(Phase2, other.Phase2);
     }
 
     public override int GetHashCode()
@@ -42,10 +44,16 @@ public sealed record DiagnosticDocument(
         {
             hash.Add(issue);
         }
+        hash.Add(Phase2);
 
         return hash.ToHashCode();
     }
 }
+
+public sealed record DiagnosticPhase2(
+    DiagnosticField Elocation,
+    DiagnosticField Abstract,
+    DiagnosticField Keywords);
 
 public sealed record DiagnosticFormatting(
     DiagnosticAlignment? AlignmentApplied,

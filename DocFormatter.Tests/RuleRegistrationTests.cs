@@ -1,6 +1,7 @@
 using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Rules;
+using DocFormatter.Core.Rules.Phase2;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -82,16 +83,39 @@ public sealed class RuleRegistrationTests
     }
 
     [Fact]
-    public void AddPhase2Rules_RegistersZeroRulesUntilLaterTasksLand()
+    public void AddPhase2Rules_AtTask06_RegistersTheThreeEmitterRulesInPipelineOrder()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<FormattingOptions>();
+
+        services.AddPhase2Rules();
+
+        using var provider = services.BuildServiceProvider();
+        var ruleTypes = provider.GetServices<IFormattingRule>().Select(r => r.GetType()).ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                typeof(EmitElocationTagRule),
+                typeof(EmitAbstractTagRule),
+                typeof(EmitKwdgrpTagRule),
+            },
+            ruleTypes);
+    }
+
+    [Fact]
+    public void AddPhase2Rules_RegistersEachRuleAsTransient()
     {
         var services = new ServiceCollection();
 
         services.AddPhase2Rules();
 
-        using var provider = services.BuildServiceProvider();
-        var rules = provider.GetServices<IFormattingRule>().ToArray();
+        var ruleDescriptors = services
+            .Where(d => d.ServiceType == typeof(IFormattingRule))
+            .ToArray();
 
-        Assert.Empty(rules);
+        Assert.Equal(3, ruleDescriptors.Length);
+        Assert.All(ruleDescriptors, d => Assert.Equal(ServiceLifetime.Transient, d.Lifetime));
     }
 
     [Fact]
