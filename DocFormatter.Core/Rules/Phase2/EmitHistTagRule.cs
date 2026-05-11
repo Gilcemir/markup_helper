@@ -53,6 +53,7 @@ public sealed class EmitHistTagRule : IFormattingRule
     public const string HistAcceptedUnparseableMessage = "hist_accepted_unparseable";
     public const string HistPublishedUnparseableMessage = "hist_published_unparseable";
     public const string HistAlreadyTaggedMessage = "hist_already_tagged";
+    public const string DocumentBodyMissingMessage = "document_body_missing";
 
     private const string HistTagName = "hist";
     private const string ReceivedTagName = "received";
@@ -85,7 +86,7 @@ public sealed class EmitHistTagRule : IFormattingRule
         var body = doc.MainDocumentPart?.Document?.Body;
         if (body is null)
         {
-            report.Warn(Name, HistReceivedMissingMessage);
+            report.Warn(Name, DocumentBodyMissingMessage);
             return;
         }
 

@@ -296,7 +296,7 @@ public sealed class EmitHistTagRuleTests : IDisposable
             report.Entries,
             e => e.Rule == nameof(EmitHistTagRule)
                 && e.Level == ReportLevel.Warn
-                && e.Message == EmitHistTagRule.HistReceivedMissingMessage);
+                && e.Message == EmitHistTagRule.DocumentBodyMissingMessage);
     }
 
     [Fact]

@@ -16,9 +16,10 @@ public sealed class Phase2ScopeTests
         // Task 09 (the Phase 4 release) adds four tags to scope: `hist`,
         // `histdate`, `received`, `accepted` — the structures
         // EmitHistTagRule now owns. The cumulative scope is the final form;
-        // `author`, `fname`, `surname` and `normaff` remain OUT of scope per
-        // ADR-001 anti-duplication: SciELO Markup auto-marks them. The diff
-        // peels them symmetrically and aligns on the inner plain text.
+        // `author`, `fname` and `surname` remain OUT of scope per ADR-001
+        // anti-duplication: SciELO Markup auto-marks them. The diff peels
+        // them symmetrically and aligns on the inner plain text.
+        // `normaff` stays IN: its structure already matches BEFORE/AFTER.
         var expected = new HashSet<string>(StringComparer.Ordinal)
         {
             "accepted",

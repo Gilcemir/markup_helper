@@ -191,10 +191,6 @@ public sealed class TagEmitterTests
 
         TagEmitter.WrapParagraphContent(paragraph, "label", NoAttrs);
 
-        var originalRuns = paragraph.Elements<Run>()
-            .Where(r => !RunText(r).StartsWith('[') || RunText(r) == "[")
-            .ToList();
-
         // The two original runs are at index 1 and 2 in the wrapped paragraph
         // (index 0 is the opening literal, last is the closing literal).
         var inner = paragraph.Elements<Run>().ToList();

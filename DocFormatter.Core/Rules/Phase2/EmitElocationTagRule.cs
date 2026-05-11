@@ -35,6 +35,7 @@ public sealed class EmitElocationTagRule : IFormattingRule
 {
     public const string ElocationParagraphMissingMessage = "elocation_id_missing";
     public const string DocOpeningTagMissingMessage = "doc_opening_tag_missing";
+    public const string DocumentBodyMissingMessage = "document_body_missing";
 
     private static readonly Regex StandaloneElocationPattern = new(
         @"^e\d{6,}$",
@@ -61,7 +62,7 @@ public sealed class EmitElocationTagRule : IFormattingRule
         var body = doc.MainDocumentPart?.Document?.Body;
         if (body is null)
         {
-            report.Warn(Name, DocOpeningTagMissingMessage);
+            report.Warn(Name, DocumentBodyMissingMessage);
             return;
         }
 

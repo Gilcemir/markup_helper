@@ -298,11 +298,16 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
         {
             return false;
         }
-        // Lead: ASCII digit, superscript ¹²³, or roman-style letter+space.
-        if (!(char.IsDigit(trimmed[0]) || trimmed[0] is '¹' or '²' or '³' or '⁴' or '⁵'))
+        // Lead: ASCII digit (any) or Unicode superscript digit ⁰¹²³⁴⁵⁶⁷⁸⁹.
+        if (!(char.IsDigit(trimmed[0])
+            || trimmed[0] is '⁰' or '¹' or '²' or '³' or '⁴'
+                          or '⁵' or '⁶' or '⁷' or '⁸' or '⁹'))
         {
             return false;
         }
+        // 20-char minimum is a heuristic floor: shortest plausible affiliation
+        // ("1 Universidade X" is ~17 chars) clears it; bare author tokens
+        // like "1 Silva" do not. Tuned against the 10-pair corpus.
         return trimmed.Length > 20;
     }
 

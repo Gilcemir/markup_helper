@@ -39,6 +39,7 @@ public sealed class EmitAbstractTagRule : IFormattingRule
 {
     public const string AbstractHeadingNotFoundMessage = "abstract_heading_not_found";
     public const string AbstractBodyNotFoundMessage = "abstract_body_not_found";
+    public const string DocumentBodyMissingMessage = "document_body_missing";
 
     private const string TagName = "xmlabstr";
     private const string SectitleTagName = "sectitle";
@@ -75,7 +76,7 @@ public sealed class EmitAbstractTagRule : IFormattingRule
         var body = doc.MainDocumentPart?.Document?.Body;
         if (body is null)
         {
-            report.Warn(Name, AbstractHeadingNotFoundMessage);
+            report.Warn(Name, DocumentBodyMissingMessage);
             return;
         }
 

@@ -15,11 +15,13 @@ namespace DocFormatter.Core.Reporting;
 /// tags whose attributes/structure the new rules now control. Task 09 adds
 /// <c>hist</c>, <c>histdate</c>, <c>received</c>, and <c>accepted</c> — the
 /// Phase 4 history block whose structure and <c>dateiso</c> attribute the
-/// new <c>EmitHistTagRule</c> now owns. <c>author</c>, <c>fname</c>,
-/// <c>surname</c> and <c>normaff</c> remain OUT of scope per ADR-001
-/// anti-duplication: SciELO Markup auto-marks them and Phase 2 must not
-/// pre-mark. The symmetric content-keep strip handles those tags by peeling
-/// wrappers on both sides; the diff aligns on the inner plain text.
+/// new <c>EmitHistTagRule</c> now owns. <c>author</c>, <c>fname</c> and
+/// <c>surname</c> remain OUT of scope per ADR-001 anti-duplication:
+/// SciELO Markup auto-marks them and Phase 2 must not pre-mark. The
+/// symmetric content-keep strip handles those tags by peeling wrappers
+/// on both sides; the diff aligns on the inner plain text. <c>normaff</c>
+/// stays IN scope: although Markup also auto-marks it, its structure
+/// already matches between BEFORE and AFTER.
 /// </para>
 ///
 /// <para>
