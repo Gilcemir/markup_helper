@@ -103,4 +103,6 @@ logs:
 clean:
 	dotnet clean $(SOLUTION) || true
 	find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
-	find $(EXAMPLES) -type d \( -name formatted -o -name formatted-phase2 \) -prune -exec rm -rf {} +
+	if [ -d "$(EXAMPLES)" ]; then \
+		find "$(EXAMPLES)" -type d \( -name formatted -o -name formatted-phase2 \) -prune -exec rm -rf {} +; \
+	fi

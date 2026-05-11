@@ -14,7 +14,7 @@ internal static class CliApp
     internal const int ExitSuccess = 0;
     internal const int ExitUsageError = 1;
     internal const int ExitCriticalAbort = 2;
-    internal const int ExitVerifyMismatch = 1;
+    internal const int ExitVerifyMismatch = 3;
 
     internal const string LogFileName = "_app.log";
     internal const string BatchSummaryFileName = "_batch_summary.txt";
@@ -442,8 +442,9 @@ internal static class CliApp
 
         Exit codes:
           0  success (file or batch ran, regardless of warnings; phase2-verify all pass)
-          1  usage error, path not found, or phase2-verify mismatch on any pair
+          1  usage error or path not found
           2  critical pipeline abort (single-file mode only)
+          3  phase2-verify mismatch on any pair
         """;
 
     internal static string GetVersion()

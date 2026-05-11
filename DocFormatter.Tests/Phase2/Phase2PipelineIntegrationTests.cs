@@ -126,7 +126,7 @@ public sealed class Phase2PipelineIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void Run_Phase2_DiagnosticJsonContainsPhase2BlockWithThreeFields()
+    public void Run_Phase2_DiagnosticJsonContainsPhase2BlockKeys()
     {
         var sourcePath = Path.Combine(_tempDir, "diag.docx");
         WriteSynthetic(sourcePath);

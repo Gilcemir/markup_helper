@@ -139,7 +139,8 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
         }
 
         var authorRegionEnd = FindAuthorRegionEnd(body);
-        var allAffIds = new SortedSet<string>(StringComparer.Ordinal);
+        var allAffIds = new List<string>();
+        var seenAffIds = new HashSet<string>(StringComparer.Ordinal);
         var authors = new List<Author>();
         int? correspIndex = null;
         var seenAuthorIndex = 0;
@@ -179,7 +180,10 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
                     OrcidId: meta.Orcid));
                 foreach (var aff in meta.AffIds)
                 {
-                    allAffIds.Add(aff);
+                    if (seenAffIds.Add(aff))
+                    {
+                        allAffIds.Add(aff);
+                    }
                 }
                 if (meta.IsCorresp && correspIndex is null)
                 {

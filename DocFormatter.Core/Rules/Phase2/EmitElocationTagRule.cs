@@ -80,14 +80,14 @@ public sealed class EmitElocationTagRule : IFormattingRule
             return;
         }
 
-        ctx.ElocationId ??= elocationId;
-
         var issueno = DeriveIssuenoFromElocationId(elocationId);
         if (!RewriteDocOpeningAttributes(docParagraph, elocationId, issueno))
         {
             report.Warn(Name, DocOpeningTagMissingMessage);
             return;
         }
+
+        ctx.ElocationId ??= elocationId;
 
         elocationParagraph.Remove();
 
