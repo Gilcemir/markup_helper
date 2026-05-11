@@ -213,6 +213,59 @@ public sealed class EmitAuthorXrefsRuleTests : IDisposable
         Assert.Contains("[authorid authidtp=\"orcid\"]0000-0000-0000-0008[/authorid]", bodyText);
     }
 
+    [Fact]
+    public void Apply_RewrittenAuthorParagraph_PutsEachTagLiteralInItsOwnRun()
+    {
+        var path = WriteFixture(new[]
+        {
+            BuildPlainParagraph(
+                "[author role=\"nd\"][fname]A[/fname] [surname]B[/surname]"
+                + "[xref ref-type=\"aff\" rid=\"aff1\"]1[/xref]* 0000-0000-0000-0001[/author]"),
+        });
+
+        Apply(path);
+
+        var runTexts = ReadRunTexts(path);
+
+        // Each emitted tag literal must be a standalone Run (the VBA macro
+        // `color(tag)` assigns a per-tag color; collapsing tags into shared
+        // Runs would paint the whole line one color).
+        Assert.Contains(runTexts, r => r.StartsWith("[author", StringComparison.Ordinal) && !r.Contains("[fname", StringComparison.Ordinal));
+        Assert.Contains(runTexts, r => r.StartsWith("[xref", StringComparison.Ordinal));
+        Assert.Contains(runTexts, r => r == "[/xref]");
+        Assert.Contains(runTexts, r => r == "[authorid authidtp=\"orcid\"]");
+        Assert.Contains(runTexts, r => r == "[/authorid]");
+        Assert.Contains(runTexts, r => r == "[/author]");
+
+        // No Run should mix a tag literal with the next plain-text segment.
+        foreach (var r in runTexts)
+        {
+            if (r.StartsWith('[') && r.Contains(']') && r.IndexOf(']') < r.Length - 1)
+            {
+                Assert.Fail($"run mixes a tag literal with adjacent text: '{r}'");
+            }
+        }
+    }
+
+    private static List<string> ReadRunTexts(string path)
+    {
+        using var doc = WordprocessingDocument.Open(path, isEditable: false);
+        var body = doc.MainDocumentPart!.Document!.Body!;
+        var runs = new List<string>();
+        foreach (var paragraph in body.Elements<Paragraph>())
+        {
+            foreach (var run in paragraph.Elements<Run>())
+            {
+                var text = string.Concat(run.Descendants<Text>().Select(t => t.Text));
+                if (text.Length > 0)
+                {
+                    runs.Add(text);
+                }
+            }
+        }
+        return runs;
+    }
+
     private (FormattingContext Ctx, IReport Report) Apply(string path)
     {
         var ctx = new FormattingContext();

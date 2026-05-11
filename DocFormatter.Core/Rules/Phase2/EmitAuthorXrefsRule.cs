@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using DocFormatter.Core.Models;
 using DocFormatter.Core.Models.Phase2;
 using DocFormatter.Core.Pipeline;
+using DocFormatter.Core.TagEmission;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -102,6 +103,13 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
     // 8-14: "Silvana Silva Red Quintal 1 0000-…").
     private static readonly Regex PlainTextAffLabelPattern = new(
         @"(?<!\d)(?<aff>\d+)(?<gap>\s+)(?=\d{4}-\d{4}-\d{4}-\d{3})",
+        RegexOptions.Compiled);
+
+    // Captures `[xref ref-type="aff" rid="…"]<label>[/xref] *` (the corresp
+    // marker `*` immediately after an aff xref). Used in step 4 to convert the
+    // bare `*` into a structured `[xref ref-type="corresp"]*[/xref]`.
+    private static readonly Regex AfterXrefStarPattern = new(
+        @"(\[xref ref-type=""aff""[^\]]*\][^\[]*\[/xref\])\s*\*",
         RegexOptions.Compiled);
 
     // Unicode superscript aff label (¹²³⁴⁵⁶⁷⁸⁹⁰): the OpenXML body sometimes
@@ -205,9 +213,15 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
             ctx.CorrespondingAuthorIndex = correspIndex;
         }
 
-        ctx.Affiliations = allAffIds
-            .Select(id => new Affiliation(id, ExtractLabelFromAffId(id)))
-            .ToArray();
+        // Same "first writer wins" precedence as ctx.Authors / corresp index:
+        // if Phase 1 already populated Affiliations (possibly with richer
+        // Orgname/Orgdiv1/Country fields), defer to it.
+        if (ctx.Affiliations is null)
+        {
+            ctx.Affiliations = allAffIds
+                .Select(id => new Affiliation(id, ExtractLabelFromAffId(id)))
+                .ToArray();
+        }
 
         report.Info(
             Name,
@@ -424,21 +438,15 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
         // Step 4: detect already-corresp via plain "*" between [/xref] and the
         // ORCID. Pattern only triggers when a plain `*` survives steps 2-3 in a
         // shape that wasn't a "no xref at all" case (e.g. `[/xref]*` literal).
-        if (!hasCorrespXref)
+        if (!hasCorrespXref && AfterXrefStarPattern.IsMatch(inner))
         {
-            var afterXrefStarPattern = new Regex(
-                @"(\[xref ref-type=""aff""[^\]]*\][^\[]*\[/xref\])\s*\*",
-                RegexOptions.Compiled);
-            if (afterXrefStarPattern.IsMatch(inner))
-            {
-                inner = afterXrefStarPattern.Replace(
-                    inner,
-                    m => string.Concat(
-                        m.Groups[1].Value,
-                        $"[xref ref-type=\"corresp\" rid=\"{CorrespId}\"]*[/xref]"),
-                    count: 1);
-                hasCorrespXref = true;
-            }
+            inner = AfterXrefStarPattern.Replace(
+                inner,
+                m => string.Concat(
+                    m.Groups[1].Value,
+                    $"[xref ref-type=\"corresp\" rid=\"{CorrespId}\"]*[/xref]"),
+                count: 1);
+            hasCorrespXref = true;
         }
 
         // Step 4b: plain-text author paragraphs (no [/surname] anchor and no
@@ -559,9 +567,10 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
                 // If this aff is already wrapped via [xref ref-type="aff"
                 // rid="affN"]<aff>[/xref] anywhere in inner, skip — the digit
                 // here is a different occurrence (e.g. body content) and
-                // shouldn't be silently wrapped.
-                var already = new Regex($@"\[xref ref-type=""aff"" rid=""{Regex.Escape(affId)}""\]");
-                if (already.IsMatch(inner))
+                // shouldn't be silently wrapped. The literal prefix is enough
+                // to detect the wrapper; no regex needed.
+                var existingMarker = $"[xref ref-type=\"aff\" rid=\"{affId}\"]";
+                if (inner.Contains(existingMarker, StringComparison.Ordinal))
                 {
                     return m.Value;
                 }
@@ -574,22 +583,22 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
         }
 
         // Step 5: wrap plain ORCID(s) in [authorid authidtp="orcid"]…[/authorid].
-        // Skip ORCIDs already inside an [authorid] wrapper.
-        var alreadyTagged = new HashSet<int>();
-        foreach (Match m in AlreadyTaggedOrcidPattern.Matches(inner))
-        {
-            alreadyTagged.Add(m.Index);
-        }
+        // Skip ORCIDs already inside an [authorid] wrapper. The wrapper's
+        // precise span comes from AlreadyTaggedOrcidPattern.Matches — no
+        // magic radius needed.
+        var taggedSpans = AlreadyTaggedOrcidPattern.Matches(inner)
+            .Select(m => (Start: m.Index, End: m.Index + m.Length))
+            .ToArray();
         var orcid = (string?)null;
         var sb = new StringBuilder();
         var cursor = 0;
         foreach (Match m in OrcidPattern.Matches(inner))
         {
-            // Skip if this ORCID match is inside an already-tagged span.
+            // Skip if this ORCID match falls inside an already-tagged span.
             var inWrapper = false;
-            foreach (var taggedStart in alreadyTagged)
+            foreach (var span in taggedSpans)
             {
-                if (m.Index > taggedStart && m.Index < taggedStart + 200)
+                if (m.Index >= span.Start && m.Index < span.End)
                 {
                     inWrapper = true;
                     break;
@@ -645,21 +654,52 @@ public sealed class EmitAuthorXrefsRule : IFormattingRule
         return sb.ToString();
     }
 
+    // Matches a single SciELO bracket-syntax tag literal: `[tag]`,
+    // `[tag attr="v"]`, or `[/tag]`. Used by WriteParagraphText to split the
+    // rewritten string into per-tag and per-text-run segments so the Word
+    // Markup VBA `color(tag)` mapping paints each tag literal independently.
+    private static readonly Regex TagLiteralPattern = new(
+        @"\[/?\w+[^\]]*\]",
+        RegexOptions.Compiled);
+
     private static void WriteParagraphText(Paragraph paragraph, string newText)
     {
-        var texts = paragraph.Descendants<Text>().ToList();
-        if (texts.Count == 0)
+        var pPr = paragraph.GetFirstChild<ParagraphProperties>()?.CloneNode(deep: true)
+            as ParagraphProperties;
+
+        paragraph.RemoveAllChildren();
+        if (pPr is not null)
+        {
+            paragraph.AppendChild(pPr);
+        }
+
+        if (newText.Length == 0)
         {
             return;
         }
 
-        texts[0].Text = newText;
-        texts[0].Space = SpaceProcessingModeValues.Preserve;
-        for (var i = 1; i < texts.Count; i++)
+        var cursor = 0;
+        foreach (Match m in TagLiteralPattern.Matches(newText))
         {
-            texts[i].Text = string.Empty;
+            if (m.Index > cursor)
+            {
+                paragraph.AppendChild(BuildPlainRun(newText[cursor..m.Index]));
+            }
+            // Each tag literal goes in its own colored Run so the Word
+            // Markup VBA `color(tag)` mapping paints per-tag.
+            paragraph.AppendChild(TagEmitter.TagLiteralRun(m.Value));
+            cursor = m.Index + m.Length;
+        }
+        if (cursor < newText.Length)
+        {
+            paragraph.AppendChild(BuildPlainRun(newText[cursor..]));
         }
     }
+
+    private static Run BuildPlainRun(string text)
+        => new(
+            RewriteHeaderMvpRule.CreateBaseRunProperties(),
+            new Text(text) { Space = SpaceProcessingModeValues.Preserve });
 
     private static string JoinParagraphText(Paragraph paragraph)
     {

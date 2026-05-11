@@ -48,13 +48,15 @@ public sealed class Phase2PipelineIntegrationTests : IDisposable
         Assert.Contains("issueno=\"2\"", bodyText);
         Assert.DoesNotContain("\ne51362627\n", bodyText);
 
-        // Abstract wrapped.
-        Assert.Contains("[xmlabstr language=\"en\"]Abstract", bodyText);
-        Assert.Contains("Body of the abstract.[/xmlabstr]", bodyText);
+        // Abstract wrapped with [sectitle] heading and [p] body.
+        Assert.Contains("[xmlabstr language=\"en\"][sectitle]Abstract[/sectitle]", bodyText);
+        Assert.Contains("[p]Body of the abstract.[/p][/xmlabstr]", bodyText);
 
-        // Keywords wrapped, no [kwd] per item.
-        Assert.Contains("[kwdgrp language=\"en\"]Keywords: K1, K2, K3[/kwdgrp]", bodyText);
-        Assert.DoesNotContain("[kwd]", bodyText);
+        // Keywords wrapped with [sectitle] label and [kwd] per term.
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Keywords:[/sectitle] "
+            + "[kwd]K1[/kwd], [kwd]K2[/kwd], [kwd]K3[/kwd][/kwdgrp]",
+            bodyText);
 
         // Order: elocation literal precedes abstract precedes kwdgrp.
         var elocationOffset = bodyText.IndexOf("elocatid=\"e51362627\"", StringComparison.Ordinal);
@@ -108,8 +110,10 @@ public sealed class Phase2PipelineIntegrationTests : IDisposable
                 + "[authorid authidtp=\"orcid\"]0000-0000-0000-0003[/authorid][/author]",
             bodyText);
 
-        // Corresp paragraph wrapped.
-        Assert.Contains("[corresp id=\"c1\"]* E-mail: bob@example.com[/corresp]", bodyText);
+        // Corresp paragraph wrapped with inner [email].
+        Assert.Contains(
+            "[corresp id=\"c1\"]* E-mail: [email]bob@example.com[/email][/corresp]",
+            bodyText);
 
         // Order: authors precede corresp.
         var alice = bodyText.IndexOf("[fname]Alice", StringComparison.Ordinal);
@@ -188,8 +192,11 @@ public sealed class Phase2PipelineIntegrationTests : IDisposable
             bodyText);
 
         // Other Phase 2 emitters still fire on the same fixture.
-        Assert.Contains("[xmlabstr language=\"en\"]Abstract", bodyText);
-        Assert.Contains("[kwdgrp language=\"en\"]Keywords: K1, K2, K3[/kwdgrp]", bodyText);
+        Assert.Contains("[xmlabstr language=\"en\"][sectitle]Abstract[/sectitle]", bodyText);
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Keywords:[/sectitle] "
+            + "[kwd]K1[/kwd], [kwd]K2[/kwd], [kwd]K3[/kwd][/kwdgrp]",
+            bodyText);
     }
 
     private static void WriteSyntheticWithHistory(string path)

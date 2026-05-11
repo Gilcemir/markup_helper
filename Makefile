@@ -12,7 +12,7 @@ MAC_BIN     := $(MAC_PUBLISH)/docformatter
 
 FILE ?= $(DEFAULT_FILE)
 
-.PHONY: help build test test-watch run run-all phase2 phase2-verify publish-mac publish-win release clean format logs
+.PHONY: help build test test-watch run run-all phase2 phase2-all phase2-verify publish-mac publish-win release clean format logs
 
 help:
 	@echo "Targets:"
@@ -22,13 +22,14 @@ help:
 	@echo "  run                run CLI on FILE=<path> (default: $(DEFAULT_FILE))"
 	@echo "  run-all            run CLI in batch mode on $(EXAMPLES)/"
 	@echo "  phase2             run Phase 2 pipeline on FILE=<path> (default: $(DEFAULT_FILE))"
+	@echo "  phase2-all         run Phase 2 pipeline in batch mode on $(PHASE2_BEFORE)/"
 	@echo "  phase2-verify      diff Phase 2 output of $(PHASE2_BEFORE) against $(PHASE2_AFTER)"
 	@echo "  publish-mac        self-contained osx-arm64 binary -> $(MAC_BIN)"
 	@echo "  publish-win        delegate to $(CLI_PROJECT)/publish.sh"
 	@echo "  release VERSION=vX.Y.Z   tag and push, triggering the CI release workflow"
 	@echo "  format             dotnet format"
 	@echo "  logs               tail latest formatted/_app.log under $(EXAMPLES)/"
-	@echo "  clean              remove bin/, obj/, and $(EXAMPLES)/**/formatted/"
+	@echo "  clean              remove bin/, obj/, $(EXAMPLES)/**/formatted/, and $(EXAMPLES)/**/formatted-phase2/"
 
 build:
 	dotnet build $(SOLUTION)
@@ -47,6 +48,9 @@ run-all:
 
 phase2:
 	dotnet run --project $(CLI_PROJECT) -- phase2 "$(FILE)"
+
+phase2-all:
+	dotnet run --project $(CLI_PROJECT) -- phase2 "$(PHASE2_BEFORE)"
 
 phase2-verify:
 	dotnet run --project $(CLI_PROJECT) -- phase2-verify "$(PHASE2_BEFORE)" "$(PHASE2_AFTER)"
@@ -99,4 +103,4 @@ logs:
 clean:
 	dotnet clean $(SOLUTION) || true
 	find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
-	find $(EXAMPLES) -type d -name formatted -prune -exec rm -rf {} +
+	find $(EXAMPLES) -type d \( -name formatted -o -name formatted-phase2 \) -prune -exec rm -rf {} +

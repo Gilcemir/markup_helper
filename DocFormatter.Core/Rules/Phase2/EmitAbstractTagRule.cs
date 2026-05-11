@@ -1,8 +1,10 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using DocFormatter.Core.Models.Phase2;
 using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.TagEmission;
+using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -10,11 +12,14 @@ namespace DocFormatter.Core.Rules.Phase2;
 
 /// <summary>
 /// Wraps the abstract section in a <c>[xmlabstr language="en"]…[/xmlabstr]</c>
-/// pair. The opening literal is inserted before the first inline of the
-/// heading paragraph (the paragraph whose normalized text starts with
-/// "Abstract" / "Resumo" per <see cref="FormattingOptions.AbstractMarkers"/>);
-/// the closing literal is inserted after the last inline of the immediately
-/// following non-empty paragraph (the abstract body).
+/// pair, emits the heading as <c>[sectitle]…[/sectitle]</c>, and wraps each
+/// body paragraph in <c>[p]…[/p]</c>. The heading paragraph is the one whose
+/// normalized text starts with "Abstract" / "Resumo" per
+/// <see cref="FormattingOptions.AbstractMarkers"/>. The body span runs from
+/// the first non-empty paragraph after the heading up to (but excluding) the
+/// next "Keywords:" / "Palavras-chave:" paragraph or the end of the body.
+/// Each emitted tag literal lives in its own <see cref="Run"/> so the Word
+/// Markup VBA <c>color(tag)</c> mapping paints per-tag colors.
 ///
 /// <para>
 /// The corpus tag name is <c>xmlabstr</c> (NOT <c>abstract</c>) — see
@@ -36,10 +41,18 @@ public sealed class EmitAbstractTagRule : IFormattingRule
     public const string AbstractBodyNotFoundMessage = "abstract_body_not_found";
 
     private const string TagName = "xmlabstr";
+    private const string SectitleTagName = "sectitle";
+    private const string ParagraphTagName = "p";
     private const string Language = "en";
 
     private static readonly IReadOnlyList<(string Key, string Value)> OpeningAttrs =
         new[] { ("language", Language) };
+
+    // Same shape as EmitKwdgrpTagRule.KeywordsMarkerPattern. Used here to
+    // stop the abstract body span before the keywords paragraph.
+    private static readonly Regex KeywordsBoundaryPattern = new(
+        @"^\s*(keywords|key\s*words|palavras[-\s]chave)\s*:",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly FormattingOptions _options;
 
@@ -73,20 +86,88 @@ public sealed class EmitAbstractTagRule : IFormattingRule
             return;
         }
 
-        var bodyParagraph = FindFollowingNonEmptyParagraph(heading);
-        if (bodyParagraph is null)
+        var bodyParagraphs = CollectBodyParagraphs(heading);
+        if (bodyParagraphs.Count == 0)
         {
             report.Warn(Name, AbstractBodyNotFoundMessage);
             return;
         }
 
+        RewriteHeadingAsSectitle(heading);
+        WrapBodyParagraphsInP(bodyParagraphs);
+
+        // Wrap the whole span: opening on the heading (before the [sectitle]
+        // we just emitted), closing on the last body paragraph (after the
+        // closing [/p] we just emitted).
         TagEmitter.InsertOpeningBefore(heading, TagName, OpeningAttrs);
-        TagEmitter.InsertClosingAfter(bodyParagraph, TagName);
+        TagEmitter.InsertClosingAfter(bodyParagraphs[^1], TagName);
 
-        ctx.Abstract = new AbstractMarker(Language, heading, bodyParagraph);
+        ctx.Abstract = new AbstractMarker(Language, heading, bodyParagraphs[^1]);
 
-        report.Info(Name, $"wrapped abstract in [{TagName} language=\"{Language}\"]");
+        report.Info(
+            Name,
+            $"wrapped abstract in [{TagName} language=\"{Language}\"] "
+            + $"with [{SectitleTagName}] and {bodyParagraphs.Count} [{ParagraphTagName}] paragraph(s)");
     }
+
+    private static void RewriteHeadingAsSectitle(Paragraph heading)
+    {
+        var headingText = ParagraphPlainText(heading);
+        var pPr = heading.GetFirstChild<ParagraphProperties>()?.CloneNode(deep: true)
+            as ParagraphProperties;
+
+        heading.RemoveAllChildren();
+        if (pPr is not null)
+        {
+            heading.AppendChild(pPr);
+        }
+
+        heading.AppendChild(
+            TagEmitter.OpeningTag(SectitleTagName, Array.Empty<(string, string)>()));
+        if (headingText.Length > 0)
+        {
+            heading.AppendChild(BuildPlainRun(headingText));
+        }
+        heading.AppendChild(TagEmitter.ClosingTag(SectitleTagName));
+    }
+
+    private static void WrapBodyParagraphsInP(IReadOnlyList<Paragraph> bodyParagraphs)
+    {
+        foreach (var p in bodyParagraphs)
+        {
+            // Insert [p]…[/p] around the existing inline content of each body
+            // paragraph. Preserves the original runs (and their formatting)
+            // and only adds two new Runs at the boundaries — keeps the rest
+            // of the document's structure intact.
+            TagEmitter.InsertOpeningBefore(p, ParagraphTagName, Array.Empty<(string, string)>());
+            TagEmitter.InsertClosingAfter(p, ParagraphTagName);
+        }
+    }
+
+    private static List<Paragraph> CollectBodyParagraphs(Paragraph heading)
+    {
+        var result = new List<Paragraph>();
+        var current = heading.NextSibling<Paragraph>();
+        while (current is not null)
+        {
+            var text = ParagraphPlainText(current);
+            if (KeywordsBoundaryPattern.IsMatch(text))
+            {
+                break;
+            }
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                result.Add(current);
+            }
+            current = current.NextSibling<Paragraph>();
+        }
+        return result;
+    }
+
+    private static Run BuildPlainRun(string text)
+        => new(
+            RewriteHeaderMvpRule.CreateBaseRunProperties(),
+            new Text(text) { Space = SpaceProcessingModeValues.Preserve });
 
     private Paragraph? FindHeadingParagraph(Body body)
     {
@@ -109,31 +190,16 @@ public sealed class EmitAbstractTagRule : IFormattingRule
 
                     // Reject paragraphs where the marker is just a prefix of a
                     // longer sentence ("Abstract submission deadline ..."), so
-                    // we don't accidentally wrap unrelated content.
-                    return null;
+                    // we don't accidentally wrap unrelated content — but keep
+                    // scanning later paragraphs in case the real heading lives
+                    // further down.
+                    break;
                 }
             }
         }
 
         return null;
     }
-
-    private static Paragraph? FindFollowingNonEmptyParagraph(Paragraph anchor)
-    {
-        var current = anchor.NextSibling<Paragraph>();
-        while (current is not null)
-        {
-            if (!IsEmpty(current))
-            {
-                return current;
-            }
-            current = current.NextSibling<Paragraph>();
-        }
-        return null;
-    }
-
-    private static bool IsEmpty(Paragraph paragraph)
-        => string.IsNullOrWhiteSpace(ParagraphPlainText(paragraph));
 
     private static string ParagraphPlainText(Paragraph paragraph)
     {

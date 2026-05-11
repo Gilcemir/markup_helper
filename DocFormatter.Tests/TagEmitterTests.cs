@@ -83,21 +83,48 @@ public sealed class TagEmitterTests
     }
 
     [Fact]
-    public void OpeningTag_RunPropertiesMatchCreateBaseRunProperties()
+    public void OpeningTag_RunPropertiesExtendBaseWithTagColor()
     {
         var emitted = TagEmitter.OpeningTag("hist", NoAttrs);
-        var expected = RewriteHeaderMvpRule.CreateBaseRunProperties();
 
-        Assert.Equal(expected.OuterXml, emitted.RunProperties!.OuterXml);
+        // RunProperties carries the base font/size and a per-tag w:color.
+        var rPr = emitted.RunProperties!;
+        Assert.NotNull(rPr.GetFirstChild<RunFonts>());
+        Assert.NotNull(rPr.GetFirstChild<FontSize>());
+        var color = rPr.GetFirstChild<Color>();
+        Assert.NotNull(color);
+        Assert.Equal("FF6600", color!.Val);
     }
 
     [Fact]
-    public void ClosingTag_RunPropertiesMatchCreateBaseRunProperties()
+    public void ClosingTag_RunPropertiesCarryTagColor()
     {
         var emitted = TagEmitter.ClosingTag("hist");
-        var expected = RewriteHeaderMvpRule.CreateBaseRunProperties();
 
-        Assert.Equal(expected.OuterXml, emitted.RunProperties!.OuterXml);
+        var color = emitted.RunProperties!.GetFirstChild<Color>();
+        Assert.NotNull(color);
+        Assert.Equal("FF6600", color!.Val);
+    }
+
+    [Fact]
+    public void TagLiteralRun_AssignsColorBasedOnExtractedTagName()
+    {
+        var run = TagEmitter.TagLiteralRun("[xref ref-type=\"aff\" rid=\"aff1\"]");
+
+        Assert.Equal("[xref ref-type=\"aff\" rid=\"aff1\"]", RunText(run));
+        var color = run.RunProperties!.GetFirstChild<Color>();
+        Assert.NotNull(color);
+        Assert.Equal("0000FF", color!.Val);
+    }
+
+    [Fact]
+    public void TagLiteralRun_ClosingTagAlsoGetsColor()
+    {
+        var run = TagEmitter.TagLiteralRun("[/authorid]");
+
+        var color = run.RunProperties!.GetFirstChild<Color>();
+        Assert.NotNull(color);
+        Assert.Equal("FF99CC", color!.Val);
     }
 
     [Fact]

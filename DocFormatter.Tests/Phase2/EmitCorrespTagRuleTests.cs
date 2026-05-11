@@ -23,7 +23,7 @@ public sealed class EmitCorrespTagRuleTests : IDisposable
     }
 
     [Fact]
-    public void Apply_GoldenPath_AsteriskEmail_WrapsParagraphInCorrespTag()
+    public void Apply_GoldenPath_AsteriskEmail_WrapsParagraphInCorrespTagAndEmail()
     {
         var path = WriteFixture(
             new[]
@@ -36,16 +36,20 @@ public sealed class EmitCorrespTagRuleTests : IDisposable
         var (ctx, report) = Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.Contains("[corresp id=\"c1\"]* E-mail: x@y.com[/corresp]", bodyText);
+        Assert.Contains(
+            "[corresp id=\"c1\"]* E-mail: [email]x@y.com[/email][/corresp]",
+            bodyText);
         Assert.NotNull(ctx.CorrespAuthor);
         Assert.Equal("x@y.com", ctx.CorrespAuthor!.Email);
         Assert.DoesNotContain(
             report.Entries,
             e => e.Rule == nameof(EmitCorrespTagRule) && e.Level == ReportLevel.Warn);
+
+        AssertEachTagLiteralIsOwnRun(path);
     }
 
     [Fact]
-    public void Apply_GoldenPath_CorrespondingAuthorMarker_WrapsParagraphInCorrespTag()
+    public void Apply_GoldenPath_CorrespondingAuthorMarker_WrapsParagraphInCorrespTagAndEmail()
     {
         var path = WriteFixture(
             new[]
@@ -56,7 +60,9 @@ public sealed class EmitCorrespTagRuleTests : IDisposable
         var (ctx, _) = Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.Contains("[corresp id=\"c1\"]Corresponding author: foo@bar.com[/corresp]", bodyText);
+        Assert.Contains(
+            "[corresp id=\"c1\"]Corresponding author: [email]foo@bar.com[/email][/corresp]",
+            bodyText);
         Assert.NotNull(ctx.CorrespAuthor);
         Assert.Equal("foo@bar.com", ctx.CorrespAuthor!.Email);
     }
@@ -90,7 +96,7 @@ public sealed class EmitCorrespTagRuleTests : IDisposable
         var path = WriteFixture(
             new[]
             {
-                BuildPlainParagraph("[corresp id=\"c1\"]* E-mail: x@y.com[/corresp]"),
+                BuildPlainParagraph("[corresp id=\"c1\"]* E-mail: [email]x@y.com[/email][/corresp]"),
             });
 
         var (_, report) = Apply(path);
@@ -98,11 +104,18 @@ public sealed class EmitCorrespTagRuleTests : IDisposable
         var bodyText = ReadBodyText(path);
         // Exactly one [corresp opening: re-running the rule must not nest.
         Assert.Equal(1, CountOccurrences(bodyText, "[corresp id=\"c1\"]"));
+        Assert.Equal(1, CountOccurrences(bodyText, "[email]"));
+        // Idempotent skip is signalled as an info entry — distinct from the
+        // "not found" warning, so diagnostic.json can tell them apart.
         Assert.Contains(
             report.Entries,
             e => e.Rule == nameof(EmitCorrespTagRule)
-                && e.Level == ReportLevel.Warn
-                && e.Message == EmitCorrespTagRule.CorrespBlockNotFoundMessage);
+                && e.Level == ReportLevel.Info
+                && e.Message == EmitCorrespTagRule.CorrespAlreadyTaggedMessage);
+        Assert.DoesNotContain(
+            report.Entries,
+            e => e.Rule == nameof(EmitCorrespTagRule)
+                && e.Level == ReportLevel.Warn);
     }
 
     [Fact]
@@ -164,6 +177,33 @@ public sealed class EmitCorrespTagRuleTests : IDisposable
             idx += needle.Length;
         }
         return count;
+    }
+
+    private static void AssertEachTagLiteralIsOwnRun(string path)
+    {
+        using var doc = WordprocessingDocument.Open(path, isEditable: false);
+        var body = doc.MainDocumentPart!.Document!.Body!;
+        var runTexts = new List<string>();
+        foreach (var p in body.Elements<Paragraph>())
+        {
+            foreach (var run in p.Elements<Run>())
+            {
+                var text = string.Concat(run.Descendants<Text>().Select(t => t.Text));
+                if (text.Length > 0)
+                {
+                    runTexts.Add(text);
+                }
+            }
+        }
+
+        // For the corresp paragraph each tag literal must be a standalone Run
+        // so Word Markup VBA `color(tag)` paints per-tag. A Run containing
+        // both `[corresp` and `[email]` (or any other combined literal) would
+        // collapse to a single color.
+        Assert.Contains(runTexts, r => r.StartsWith("[corresp", StringComparison.Ordinal) && !r.Contains("[email", StringComparison.Ordinal));
+        Assert.Contains(runTexts, r => r == "[email]");
+        Assert.Contains(runTexts, r => r == "[/email]");
+        Assert.Contains(runTexts, r => r == "[/corresp]");
     }
 
     private static Paragraph BuildPlainParagraph(string text)

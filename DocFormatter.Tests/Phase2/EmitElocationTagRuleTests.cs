@@ -191,9 +191,12 @@ public sealed class EmitElocationTagRuleTests : IDisposable
 
     internal static void AssertNoAntiDuplicationLiterals(string bodyText)
     {
-        // Anti-duplication invariant from docs/scielo_context/REENTRANCE.md.
-        // SciELO Markup auto-marks these tags; pre-marking duplicates them.
-        // Phase 2 emitters MUST NOT introduce them.
+        // Anti-duplication invariant (narrowed): see ADR-001 follow-up note.
+        // Phase 2 owns [kwd] / [sectitle] / [p] / [email] inside the wrappers
+        // it emits — the corpus AFTER shape carries these tags and the Word
+        // Markup VBA does not duplicate them when they are pre-marked. The
+        // remaining names below are still owned by Markup and must NOT be
+        // pre-marked by any Phase 2 emitter.
         var forbidden = new[]
         {
             "[author",
@@ -202,8 +205,6 @@ public sealed class EmitElocationTagRuleTests : IDisposable
             "[/fname]",
             "[surname]",
             "[/surname]",
-            "[kwd]",
-            "[/kwd]",
             "[normaff",
             "[/normaff]",
         };

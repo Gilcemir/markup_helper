@@ -24,7 +24,7 @@ public sealed class EmitKwdgrpTagRuleTests : IDisposable
     }
 
     [Fact]
-    public void Apply_GoldenPath_CommaSeparated_WrapsParagraphInKwdgrpAndDoesNotEmitKwd()
+    public void Apply_GoldenPath_CommaSeparated_WrapsParagraphAndEmitsSectitleAndKwds()
     {
         var path = WriteFixture(
             new[]
@@ -38,18 +38,21 @@ public sealed class EmitKwdgrpTagRuleTests : IDisposable
         var (ctx, report) = Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.Contains("[kwdgrp language=\"en\"]Keywords: K1, K2, K3[/kwdgrp]", bodyText);
-        Assert.DoesNotContain("[kwd]", bodyText); // anti-duplication invariant
-        Assert.DoesNotContain("[/kwd]", bodyText);
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Keywords:[/sectitle] "
+            + "[kwd]K1[/kwd], [kwd]K2[/kwd], [kwd]K3[/kwd][/kwdgrp]",
+            bodyText);
         Assert.NotNull(ctx.Keywords);
         Assert.Equal(new[] { "K1", "K2", "K3" }, ctx.Keywords!.Keywords);
         Assert.DoesNotContain(
             report.Entries,
             e => e.Rule == nameof(EmitKwdgrpTagRule) && e.Level == ReportLevel.Warn);
+
+        AssertEachTagLiteralIsOwnRun(path);
     }
 
     [Fact]
-    public void Apply_GoldenPath_SemicolonSeparated_WrapsParagraphAndParsesKeywords()
+    public void Apply_GoldenPath_SemicolonSeparated_PreservesOriginalSeparator()
     {
         var path = WriteFixture(
             new[]
@@ -62,8 +65,10 @@ public sealed class EmitKwdgrpTagRuleTests : IDisposable
         var (ctx, _) = Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.Contains("[kwdgrp language=\"en\"]Keywords: K1; K2; K3[/kwdgrp]", bodyText);
-        Assert.DoesNotContain("[kwd]", bodyText);
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Keywords:[/sectitle] "
+            + "[kwd]K1[/kwd]; [kwd]K2[/kwd]; [kwd]K3[/kwd][/kwdgrp]",
+            bodyText);
         Assert.NotNull(ctx.Keywords);
         Assert.Equal(new[] { "K1", "K2", "K3" }, ctx.Keywords!.Keywords);
     }
@@ -82,7 +87,10 @@ public sealed class EmitKwdgrpTagRuleTests : IDisposable
         Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.Contains("[kwdgrp language=\"en\"]Palavras-chave: K1, K2[/kwdgrp]", bodyText);
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Palavras-chave:[/sectitle] "
+            + "[kwd]K1[/kwd], [kwd]K2[/kwd][/kwdgrp]",
+            bodyText);
     }
 
     [Fact]
@@ -137,6 +145,33 @@ public sealed class EmitKwdgrpTagRuleTests : IDisposable
 
     private static Paragraph BuildPlainParagraph(string text)
         => new(new Run(new Text(text) { Space = SpaceProcessingModeValues.Preserve }));
+
+    private static void AssertEachTagLiteralIsOwnRun(string path)
+    {
+        using var doc = WordprocessingDocument.Open(path, isEditable: false);
+        var body = doc.MainDocumentPart!.Document!.Body!;
+        var runTexts = new List<string>();
+        foreach (var p in body.Elements<Paragraph>())
+        {
+            foreach (var run in p.Elements<Run>())
+            {
+                var text = string.Concat(run.Descendants<Text>().Select(t => t.Text));
+                if (text.Length > 0)
+                {
+                    runTexts.Add(text);
+                }
+            }
+        }
+
+        // Each tag literal must live in its own Run so the VBA macro can
+        // assign a per-tag color.
+        Assert.Contains(runTexts, r => r.StartsWith("[kwdgrp", StringComparison.Ordinal) && !r.Contains("[sectitle", StringComparison.Ordinal));
+        Assert.Contains(runTexts, r => r == "[sectitle]");
+        Assert.Contains(runTexts, r => r == "[/sectitle]");
+        Assert.Contains(runTexts, r => r == "[kwd]");
+        Assert.Contains(runTexts, r => r == "[/kwd]");
+        Assert.Contains(runTexts, r => r == "[/kwdgrp]");
+    }
 
     private string WriteFixture(IEnumerable<Paragraph> paragraphs)
     {

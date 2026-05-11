@@ -24,7 +24,7 @@ public sealed class EmitAbstractTagRuleTests : IDisposable
     }
 
     [Fact]
-    public void Apply_GoldenPath_WrapsHeadingAndBodyParagraphsInXmlabstr()
+    public void Apply_GoldenPath_WrapsHeadingInSectitleAndBodyInP()
     {
         var path = WriteFixture(
             new[]
@@ -36,13 +36,15 @@ public sealed class EmitAbstractTagRuleTests : IDisposable
         var (ctx, report) = Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.StartsWith("[xmlabstr language=\"en\"]Abstract", bodyText);
-        Assert.EndsWith("Body of the abstract.[/xmlabstr]", bodyText);
+        Assert.Contains("[xmlabstr language=\"en\"][sectitle]Abstract[/sectitle]", bodyText);
+        Assert.Contains("[p]Body of the abstract.[/p][/xmlabstr]", bodyText);
         Assert.NotNull(ctx.Abstract);
         Assert.Equal("en", ctx.Abstract!.Language);
         Assert.DoesNotContain(
             report.Entries,
             e => e.Rule == nameof(EmitAbstractTagRule) && e.Level == ReportLevel.Warn);
+
+        AssertEachTagLiteralIsOwnRun(path);
     }
 
     [Fact]
@@ -58,8 +60,32 @@ public sealed class EmitAbstractTagRuleTests : IDisposable
         Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.Contains("[xmlabstr language=\"en\"]Resumo", bodyText);
-        Assert.Contains("Corpo do resumo.[/xmlabstr]", bodyText);
+        Assert.Contains("[xmlabstr language=\"en\"][sectitle]Resumo[/sectitle]", bodyText);
+        Assert.Contains("[p]Corpo do resumo.[/p][/xmlabstr]", bodyText);
+    }
+
+    [Fact]
+    public void Apply_MultiParagraphBody_EmitsOnePPerParagraphAndStopsAtKeywords()
+    {
+        var path = WriteFixture(
+            new[]
+            {
+                BuildPlainParagraph("Abstract"),
+                BuildPlainParagraph("First paragraph of the abstract."),
+                BuildPlainParagraph("Second paragraph."),
+                BuildPlainParagraph("Keywords: K1, K2"),
+                BuildPlainParagraph("After keywords."),
+            });
+
+        Apply(path);
+
+        var bodyText = ReadBodyText(path);
+        Assert.Contains("[xmlabstr language=\"en\"][sectitle]Abstract[/sectitle]", bodyText);
+        Assert.Contains("[p]First paragraph of the abstract.[/p]", bodyText);
+        Assert.Contains("[p]Second paragraph.[/p][/xmlabstr]", bodyText);
+        // The keywords paragraph and anything past it must NOT be wrapped.
+        Assert.DoesNotContain("[p]Keywords:", bodyText);
+        Assert.DoesNotContain("[p]After keywords.", bodyText);
     }
 
     [Fact]
@@ -119,8 +145,33 @@ public sealed class EmitAbstractTagRuleTests : IDisposable
         Apply(path);
 
         var bodyText = ReadBodyText(path);
-        Assert.Contains("[xmlabstr language=\"en\"]Abstract", bodyText);
-        Assert.Contains("Real body text.[/xmlabstr]", bodyText);
+        Assert.Contains("[xmlabstr language=\"en\"][sectitle]Abstract[/sectitle]", bodyText);
+        Assert.Contains("[p]Real body text.[/p][/xmlabstr]", bodyText);
+    }
+
+    [Fact]
+    public void Apply_NonHeadingAbstractPrefixBeforeRealHeading_StillWrapsRealHeading()
+    {
+        // A paragraph that starts with "Abstract" but continues into a longer
+        // sentence ("Abstract submission deadline ...") must not abort the
+        // scan — the real heading sits later. Regression for issue 001.
+        var path = WriteFixture(
+            new[]
+            {
+                BuildPlainParagraph("Abstract submission deadline: 2026-01-15."),
+                BuildPlainParagraph("Abstract"),
+                BuildPlainParagraph("Real body of the abstract."),
+            });
+
+        var (ctx, report) = Apply(path);
+
+        var bodyText = ReadBodyText(path);
+        Assert.Contains("[xmlabstr language=\"en\"][sectitle]Abstract[/sectitle]", bodyText);
+        Assert.Contains("[p]Real body of the abstract.[/p][/xmlabstr]", bodyText);
+        Assert.NotNull(ctx.Abstract);
+        Assert.DoesNotContain(
+            report.Entries,
+            e => e.Rule == nameof(EmitAbstractTagRule) && e.Level == ReportLevel.Warn);
     }
 
     [Fact]
@@ -151,6 +202,31 @@ public sealed class EmitAbstractTagRuleTests : IDisposable
 
     private static Paragraph BuildPlainParagraph(string text)
         => new(new Run(new Text(text) { Space = SpaceProcessingModeValues.Preserve }));
+
+    private static void AssertEachTagLiteralIsOwnRun(string path)
+    {
+        using var doc = WordprocessingDocument.Open(path, isEditable: false);
+        var body = doc.MainDocumentPart!.Document!.Body!;
+        var runTexts = new List<string>();
+        foreach (var paragraph in body.Elements<Paragraph>())
+        {
+            foreach (var run in paragraph.Elements<Run>())
+            {
+                var text = string.Concat(run.Descendants<Text>().Select(t => t.Text));
+                if (text.Length > 0)
+                {
+                    runTexts.Add(text);
+                }
+            }
+        }
+
+        Assert.Contains(runTexts, r => r.StartsWith("[xmlabstr", StringComparison.Ordinal) && !r.Contains("[sectitle", StringComparison.Ordinal));
+        Assert.Contains(runTexts, r => r == "[sectitle]");
+        Assert.Contains(runTexts, r => r == "[/sectitle]");
+        Assert.Contains(runTexts, r => r == "[p]");
+        Assert.Contains(runTexts, r => r == "[/p]");
+        Assert.Contains(runTexts, r => r == "[/xmlabstr]");
+    }
 
     private string WriteFixture(IEnumerable<Paragraph> paragraphs)
     {

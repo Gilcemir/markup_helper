@@ -52,6 +52,7 @@ public sealed class EmitHistTagRule : IFormattingRule
     public const string HistReceivedUnparseableMessage = "hist_received_unparseable";
     public const string HistAcceptedUnparseableMessage = "hist_accepted_unparseable";
     public const string HistPublishedUnparseableMessage = "hist_published_unparseable";
+    public const string HistAlreadyTaggedMessage = "hist_already_tagged";
 
     private const string HistTagName = "hist";
     private const string ReceivedTagName = "received";
@@ -91,7 +92,10 @@ public sealed class EmitHistTagRule : IFormattingRule
         var candidates = CollectCandidates(body);
         if (candidates.AnyHistLiteral)
         {
-            // Idempotency: a prior run already wrapped the block.
+            // Idempotency: a prior run already wrapped the block. Emit an info
+            // entry so the diagnostic JSON can distinguish "already tagged"
+            // from "nothing found" downstream.
+            report.Info(Name, HistAlreadyTaggedMessage);
             return;
         }
 

@@ -3,18 +3,20 @@ using System.Text.RegularExpressions;
 using DocFormatter.Core.Models.Phase2;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.TagEmission;
+using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocFormatter.Core.Rules.Phase2;
 
 /// <summary>
-/// Wraps the corresponding-author paragraph in <c>[corresp id="c1"]…[/corresp]</c>.
-/// The paragraph is identified by either an asterisk-led <c>* E-mail: …</c>
-/// shape (most articles) or a leading <c>Corresponding author: …</c> phrase
-/// (5458, 5523, 5549 in the corpus). Per ADR-001 anti-duplication invariants,
-/// this rule does NOT pre-mark the inner <c>[email]</c> wrapper — Markup
-/// auto-marks it (task 09 / future) and pre-marking would duplicate.
+/// Wraps the corresponding-author paragraph in <c>[corresp id="c1"]…[/corresp]</c>
+/// and emits the inner <c>[email]…[/email]</c> wrapper around the address. The
+/// paragraph is identified by either an asterisk-led <c>* E-mail: …</c> shape
+/// (most articles) or a leading <c>Corresponding author: …</c> phrase (5458,
+/// 5523, 5549 in the corpus). Each emitted tag literal lives in its own
+/// <see cref="Run"/> so the Word Markup VBA <c>color(tag)</c> mapping paints
+/// per-tag colors instead of staining the whole paragraph.
 ///
 /// <para>
 /// Per ADR-002 the rule skips and warns rather than aborting. Reason code
@@ -25,8 +27,10 @@ namespace DocFormatter.Core.Rules.Phase2;
 public sealed class EmitCorrespTagRule : IFormattingRule
 {
     public const string CorrespBlockNotFoundMessage = "corresp_block_not_found";
+    public const string CorrespAlreadyTaggedMessage = "corresp_already_tagged";
 
     private const string TagName = "corresp";
+    private const string EmailTagName = "email";
     private const string CorrespId = "c1";
 
     private static readonly IReadOnlyList<(string Key, string Value)> OpeningAttrs =
@@ -65,60 +69,131 @@ public sealed class EmitCorrespTagRule : IFormattingRule
             return;
         }
 
-        var (paragraph, plainText) = FindCorrespParagraph(body);
-        if (paragraph is null || plainText is null)
+        var lookup = FindCorrespParagraph(body);
+        if (lookup.AlreadyTagged)
+        {
+            // Idempotency: a prior run wrapped this paragraph. Signal it so
+            // the diagnostic JSON can distinguish "already done" from
+            // "nothing found."
+            report.Info(Name, CorrespAlreadyTaggedMessage);
+            return;
+        }
+        if (lookup.Paragraph is null || lookup.PlainText is null)
         {
             report.Warn(Name, CorrespBlockNotFoundMessage);
             return;
         }
 
-        // Preserve the paragraph's trailing whitespace verbatim — the AFTER
-        // corpus mostly mirrors the BEFORE shape (5313, 5419, 5434, 5449
-        // retain a trailing space inside `[/corresp]`; 5293 / 5424 do not).
-        // Trimming is therefore left to corpus amendment when the BEFORE
-        // diverges from the AFTER on whitespace.
-        TagEmitter.InsertOpeningBefore(paragraph, TagName, OpeningAttrs);
-        TagEmitter.InsertClosingAfter(paragraph, TagName);
+        var paragraph = lookup.Paragraph;
+        var plainText = lookup.PlainText;
 
-        var email = ExtractEmail(plainText) ?? ctx.CorrespondingEmail;
-        ctx.CorrespAuthor = new CorrespAuthor(
-            ctx.CorrespondingAuthorIndex,
-            email,
-            ctx.CorrespondingOrcid,
-            paragraph);
+        // Rebuild the paragraph as a sequence of independent Runs so the Word
+        // Markup VBA `color(tag)` mapping can paint each tag literal in its
+        // own color. The trailing whitespace of the original paragraph is
+        // preserved verbatim — the AFTER corpus mostly mirrors the BEFORE
+        // shape (5313, 5419, 5434, 5449 retain a trailing space inside
+        // `[/corresp]`; 5293 / 5424 do not).
+        var emailMatch = EmailPattern.Match(plainText);
+        var emailValue = emailMatch.Success ? emailMatch.Value : null;
+        RewriteCorrespParagraph(paragraph, plainText, emailMatch);
 
-        report.Info(Name, $"wrapped corresp paragraph in [{TagName} id=\"{CorrespId}\"]");
+        var email = emailValue ?? ctx.CorrespondingEmail;
+        // Same "first writer wins" precedence used by EmitAuthorXrefsRule for
+        // ctx.Authors / Affiliations: defer to whatever Phase 1 or an earlier
+        // Phase 2 rule already published.
+        if (ctx.CorrespAuthor is null)
+        {
+            ctx.CorrespAuthor = new CorrespAuthor(
+                ctx.CorrespondingAuthorIndex,
+                email,
+                ctx.CorrespondingOrcid,
+                paragraph);
+        }
+
+        if (emailValue is null)
+        {
+            report.Info(Name, $"wrapped corresp paragraph in [{TagName} id=\"{CorrespId}\"]");
+        }
+        else
+        {
+            report.Info(
+                Name,
+                $"wrapped corresp paragraph in [{TagName} id=\"{CorrespId}\"] with inner [{EmailTagName}]");
+        }
     }
 
-    private static (Paragraph? Paragraph, string? PlainText) FindCorrespParagraph(Body body)
+    private static void RewriteCorrespParagraph(Paragraph paragraph, string text, Match emailMatch)
+    {
+        var pPr = paragraph.GetFirstChild<ParagraphProperties>()?.CloneNode(deep: true)
+            as ParagraphProperties;
+
+        paragraph.RemoveAllChildren();
+        if (pPr is not null)
+        {
+            paragraph.AppendChild(pPr);
+        }
+
+        paragraph.AppendChild(TagEmitter.OpeningTag(TagName, OpeningAttrs));
+
+        if (!emailMatch.Success)
+        {
+            if (text.Length > 0)
+            {
+                paragraph.AppendChild(BuildPlainRun(text));
+            }
+            paragraph.AppendChild(TagEmitter.ClosingTag(TagName));
+            return;
+        }
+
+        var prefix = text[..emailMatch.Index];
+        var suffix = text[(emailMatch.Index + emailMatch.Length)..];
+
+        if (prefix.Length > 0)
+        {
+            paragraph.AppendChild(BuildPlainRun(prefix));
+        }
+
+        paragraph.AppendChild(TagEmitter.OpeningTag(EmailTagName, Array.Empty<(string, string)>()));
+        paragraph.AppendChild(BuildPlainRun(emailMatch.Value));
+        paragraph.AppendChild(TagEmitter.ClosingTag(EmailTagName));
+
+        if (suffix.Length > 0)
+        {
+            paragraph.AppendChild(BuildPlainRun(suffix));
+        }
+
+        paragraph.AppendChild(TagEmitter.ClosingTag(TagName));
+    }
+
+    private static Run BuildPlainRun(string text)
+        => new(
+            RewriteHeaderMvpRule.CreateBaseRunProperties(),
+            new Text(text) { Space = SpaceProcessingModeValues.Preserve });
+
+    private static CorrespLookup FindCorrespParagraph(Body body)
     {
         foreach (var paragraph in body.Elements<Paragraph>())
         {
             var text = ParagraphPlainText(paragraph);
 
-            // Skip paragraphs that already carry a [corresp …] literal — the
-            // rule must be idempotent against re-runs (test fixtures may seed
-            // the wrapper). The inner [email]…[/email] is allowed: that's
-            // Markup's territory (task 09 / future).
+            // Idempotency: a paragraph already carrying a [corresp …] literal
+            // means a prior run wrapped this block. Don't re-wrap, but signal
+            // it to the caller separately from "not found."
             if (text.Contains("[corresp", StringComparison.Ordinal))
             {
-                return (null, null);
+                return new CorrespLookup(null, null, AlreadyTagged: true);
             }
 
             if (AsteriskMarkerPattern.IsMatch(text)
                 || CorrespondingAuthorPattern.IsMatch(text))
             {
-                return (paragraph, text);
+                return new CorrespLookup(paragraph, text, AlreadyTagged: false);
             }
         }
-        return (null, null);
+        return new CorrespLookup(null, null, AlreadyTagged: false);
     }
 
-    private static string? ExtractEmail(string text)
-    {
-        var match = EmailPattern.Match(text);
-        return match.Success ? match.Value : null;
-    }
+    private sealed record CorrespLookup(Paragraph? Paragraph, string? PlainText, bool AlreadyTagged);
 
     private static string ParagraphPlainText(Paragraph paragraph)
     {

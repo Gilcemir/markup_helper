@@ -22,10 +22,12 @@ namespace DocFormatter.Core.TagEmission;
 /// (see <c>docs/scielo_context/REENTRANCE.md</c>) re-emit certain tags
 /// without checking for prior existence. Pre-marking any of the names
 /// below with this helper will cause Markup to duplicate them:
-/// <c>author</c>, <c>fname</c>, <c>surname</c>, <c>kwd</c>,
-/// <c>normaff</c>, <c>doctitle</c>, <c>doi</c>. This helper does not
-/// enforce the list (rules choose their own tag names); callers must
-/// not pass these names.
+/// <c>author</c>, <c>fname</c>, <c>surname</c>, <c>normaff</c>,
+/// <c>doctitle</c>, <c>doi</c>. The inner Phase-2 tags <c>sectitle</c>,
+/// <c>kwd</c>, <c>p</c> and <c>email</c> are <b>owned by Phase 2</b>
+/// (see ADR-001 follow-up note) and are safe to pre-mark. This helper
+/// does not enforce the list (rules choose their own tag names); callers
+/// must not pass the still-restricted names.
 /// </para>
 ///
 /// <para>
@@ -45,13 +47,51 @@ public static class TagEmitter
         ArgumentException.ThrowIfNullOrWhiteSpace(tagName);
         ArgumentNullException.ThrowIfNull(attrs);
 
-        return BuildRun(BuildOpeningLiteral(tagName, attrs));
+        return BuildColoredRun(BuildOpeningLiteral(tagName, attrs), TagColors.Lookup(tagName));
     }
 
     public static Run ClosingTag(string tagName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tagName);
-        return BuildRun($"[/{tagName}]");
+        return BuildColoredRun($"[/{tagName}]", TagColors.Lookup(tagName));
+    }
+
+    /// <summary>
+    /// Builds a <see cref="Run"/> for an already-formed tag literal string
+    /// (e.g. <c>[xref ref-type="aff" rid="aff1"]</c>). Used by emitters that
+    /// produce the literal via string transformations and need to wrap it in
+    /// its own colored Run after the fact. The tag name is extracted from
+    /// the literal so the color lookup can run.
+    /// </summary>
+    public static Run TagLiteralRun(string literal)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(literal);
+        var name = ExtractTagName(literal);
+        var color = name is null ? null : TagColors.Lookup(name);
+        return BuildColoredRun(literal, color);
+    }
+
+    private static string? ExtractTagName(string literal)
+    {
+        // Accept "[name…]", "[/name]", or "[name]". The first run of word
+        // characters after the opening bracket (and optional leading slash)
+        // is the tag name.
+        if (literal.Length < 2 || literal[0] != '[')
+        {
+            return null;
+        }
+        var start = literal[1] == '/' ? 2 : 1;
+        var end = start;
+        while (end < literal.Length)
+        {
+            var c = literal[end];
+            if (!char.IsLetterOrDigit(c) && c != '-' && c != '_')
+            {
+                break;
+            }
+            end++;
+        }
+        return end > start ? literal[start..end] : null;
     }
 
     public static void InsertOpeningBefore(
@@ -101,10 +141,15 @@ public static class TagEmitter
         InsertClosingAfter(paragraph, tagName);
     }
 
-    private static Run BuildRun(string text)
-        => new(
-            RewriteHeaderMvpRule.CreateBaseRunProperties(),
-            new Text(text) { Space = SpaceProcessingModeValues.Preserve });
+    private static Run BuildColoredRun(string text, string? color)
+    {
+        var rPr = RewriteHeaderMvpRule.CreateBaseRunProperties();
+        if (!string.IsNullOrEmpty(color))
+        {
+            rPr.AppendChild(new Color { Val = color });
+        }
+        return new Run(rPr, new Text(text) { Space = SpaceProcessingModeValues.Preserve });
+    }
 
     private static string BuildOpeningLiteral(
         string tagName,
