@@ -215,6 +215,10 @@ public sealed class ExtractAuthorsRuleTests
     {
         // Reproducer for reviews-002/issue_001: production article 1_AR_5449_2.docx wraps
         // the author NAME inside the ORCID-targeted hyperlink. Old design dropped the name.
+        // ADR-008: the trailing "*" superscript run is the corresp marker; it merges into
+        // the preceding affiliation label so the produced superscript becomes "1,2*" (which
+        // Markup's mark_authors handles) instead of "1,2,*" (which it mis-splits at the
+        // inner comma).
         using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph();
         var mainPart = GetMainPart(doc);
         var rel1 = mainPart.AddHyperlinkRelationship(new Uri("https://orcid.org/0009-0007-2181-5830"), true);
@@ -240,7 +244,7 @@ public sealed class ExtractAuthorsRuleTests
         Assert.Equal(AuthorConfidence.High, ctx.Authors[0].Confidence);
 
         Assert.Equal("Hoang Dang Khoa Do", ctx.Authors[1].Name);
-        Assert.Equal(new[] { "1", "2", "*" }, ctx.Authors[1].AffiliationLabels);
+        Assert.Equal(new[] { "1", "2*" }, ctx.Authors[1].AffiliationLabels);
         Assert.Equal("0000-0002-7970-9359", ctx.Authors[1].OrcidId);
         Assert.Equal(AuthorConfidence.High, ctx.Authors[1].Confidence);
 
@@ -572,6 +576,158 @@ public sealed class ExtractAuthorsRuleTests
         Assert.Equal("Hoang Dang Khoa Do", ctx.Authors[1].Name);
         Assert.Equal(new[] { "1", "2" }, ctx.Authors[1].AffiliationLabels);
         Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Error);
+    }
+
+    [Fact]
+    public void Apply_WithSeparateAsteriskSuperscriptAfterDigit_MergesAsteriskOntoLastLabel_5313Shape()
+    {
+        // ADR-008: 9_CR_5313_2.docx Stage-1 input — the affected author's superscript is
+        // emitted as two adjacent superscript runs: "1" then "*". Pre-fix the rule produced
+        // ["1", "*"], which RewriteHeaderMvpRule comma-joined as "1,*" — Markup's
+        // mark_authors splits on that inner comma and fails to auto-mark the author.
+        // Post-fix the asterisk is folded onto the trailing label, producing ["1*"] →
+        // emitted superscript "1*" (matching the canonical 5136 shape).
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.Build5313FailureShape("Flavia Alves Silva"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Flavia Alves Silva", author.Name);
+        Assert.Equal(new[] { "1*" }, author.AffiliationLabels);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Warn || e.Level == ReportLevel.Error);
+    }
+
+    [Fact]
+    public void Apply_WithSeparateAsteriskSuperscriptAfterMultiDigit_MergesOntoLastLabelOnly_5449Shape()
+    {
+        // ADR-008: 1_AR_5449_2.docx Stage-1 input — the corresponding author's superscript
+        // is emitted as "1,2" (single run, comma-internal) followed by a separate "*" run.
+        // The asterisk is the corresp marker for that single author and must merge onto the
+        // trailing aff label only ("2" → "2*"), not onto the entire list. The earlier "1"
+        // entry keeps its own slot. Result: ["1", "2*"] → emitted superscript "1,2*".
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.Build5449FailureShape("Hoang Dang Khoa Do"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Hoang Dang Khoa Do", author.Name);
+        Assert.Equal(new[] { "1", "2*" }, author.AffiliationLabels);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Warn || e.Level == ReportLevel.Error);
+    }
+
+    [Fact]
+    public void Apply_WithCommaSeparatedAsteriskInsideSingleSuperscriptRun_MergesAsteriskAfterSplit()
+    {
+        // Variant of the 5313 shape: instead of two adjacent superscript runs, a single run
+        // contains "1,*". SplitLabels produces ["1", "*"] tokens and the merge folds them
+        // into ["1*"]. Same observable post-fix shape as the two-run variant.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Solo Author"),
+            AuthorsParagraphFactory.SuperscriptRun("1,*"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Solo Author", author.Name);
+        Assert.Equal(new[] { "1*" }, author.AffiliationLabels);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+    }
+
+    [Fact]
+    public void Apply_WithLeadingAsteriskOnlyLabel_KeepsAsteriskAsFirstLabel()
+    {
+        // Boundary: an author whose only label is the corresp asterisk (no aff index). The
+        // merge predicate requires a previous label; with none, the asterisk is kept as
+        // ["*"]. Information is preserved for downstream Phase 3 work.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Corresp Only"),
+            AuthorsParagraphFactory.SuperscriptRun("*"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Corresp Only", author.Name);
+        Assert.Equal(new[] { "*" }, author.AffiliationLabels);
+    }
+
+    [Fact]
+    public void Apply_WithMultipleAdjacentAsteriskSuperscripts_AllMergeOntoLastLabel()
+    {
+        // Defensive: if for some reason a paragraph contains "1" then "*" then "*", both
+        // asterisks attach to the trailing aff label. Same downstream shape, no inner
+        // commas introduced.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Edge Case"),
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            AuthorsParagraphFactory.SuperscriptRun("*"),
+            AuthorsParagraphFactory.SuperscriptRun("*"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Edge Case", author.Name);
+        Assert.Equal(new[] { "1**" }, author.AffiliationLabels);
+    }
+
+    [Fact]
+    public void Apply_WithSingleAuthorAndMergedDigitAsteriskRun_PreservesShapeUntouched_5136Baseline()
+    {
+        // Non-regression: when the original author paragraph stores the digit and the
+        // asterisk in a single superscript run (the canonical 5136 / 5548 shape), nothing
+        // changes — SplitLabels yields ["1*"], no merge required, label set unaffected.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Talles de Oliveira Santos"),
+            AuthorsParagraphFactory.SuperscriptRun("1*"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Talles de Oliveira Santos", author.Name);
+        Assert.Equal(new[] { "1*" }, author.AffiliationLabels);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+    }
+
+    [Fact]
+    public void Apply_NoneOfProducedRunsContainBracketLiterals_AntiDuplicationInvariant()
+    {
+        // ADR-008 / REENTRANCE.md invariant: the fix must not pre-mark [author], [fname],
+        // [surname] (Markup auto-marks those and would duplicate). Verify that none of the
+        // body's run text in the post-fix author block contains those literals.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Author A"),
+            AuthorsParagraphFactory.SuperscriptRun("1"),
+            AuthorsParagraphFactory.SuperscriptRun("*"),
+            AuthorsParagraphFactory.TextRun(", Author B"),
+            AuthorsParagraphFactory.SuperscriptRun("2"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var bodyText = string.Concat(
+            AuthorsParagraphFactory
+                .GetBody(doc)
+                .Descendants<Text>()
+                .Select(t => t.Text));
+        Assert.DoesNotContain("[author]", bodyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("[fname]", bodyText, StringComparison.Ordinal);
+        Assert.DoesNotContain("[surname]", bodyText, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,0 +1,202 @@
+using DocFormatter.Core.Pipeline;
+using DocFormatter.Core.Rules.Phase2;
+using DocFormatter.Tests.Fixtures.Phase2;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using Xunit;
+
+namespace DocFormatter.Tests.Phase2;
+
+public sealed class EmitKwdgrpTagRuleTests : IDisposable
+{
+    private readonly string _tempDir;
+
+    public EmitKwdgrpTagRuleTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), $"emit-kwdgrp-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_tempDir, recursive: true); } catch { /* best effort */ }
+    }
+
+    [Fact]
+    public void Apply_GoldenPath_CommaSeparated_WrapsParagraphAndEmitsSectitleAndKwds()
+    {
+        var path = WriteFixture(
+            new[]
+            {
+                BuildPlainParagraph("Body."),
+                KeywordsParagraphFactory.CreateCommaSeparated(
+                    KeywordsParagraphFactory.DefaultEnglishMarker,
+                    "K1", "K2", "K3"),
+            });
+
+        var (ctx, report) = Apply(path);
+
+        var bodyText = ReadBodyText(path);
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Keywords:[/sectitle] "
+            + "[kwd]K1[/kwd], [kwd]K2[/kwd], [kwd]K3[/kwd][/kwdgrp]",
+            bodyText);
+        Assert.NotNull(ctx.Keywords);
+        Assert.Equal(new[] { "K1", "K2", "K3" }, ctx.Keywords!.Keywords);
+        Assert.DoesNotContain(
+            report.Entries,
+            e => e.Rule == nameof(EmitKwdgrpTagRule) && e.Level == ReportLevel.Warn);
+
+        AssertEachTagLiteralIsOwnRun(path);
+    }
+
+    [Fact]
+    public void Apply_GoldenPath_SemicolonSeparated_PreservesOriginalSeparator()
+    {
+        var path = WriteFixture(
+            new[]
+            {
+                KeywordsParagraphFactory.CreateSemicolonSeparated(
+                    KeywordsParagraphFactory.DefaultEnglishMarker,
+                    "K1", "K2", "K3"),
+            });
+
+        var (ctx, _) = Apply(path);
+
+        var bodyText = ReadBodyText(path);
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Keywords:[/sectitle] "
+            + "[kwd]K1[/kwd]; [kwd]K2[/kwd]; [kwd]K3[/kwd][/kwdgrp]",
+            bodyText);
+        Assert.NotNull(ctx.Keywords);
+        Assert.Equal(new[] { "K1", "K2", "K3" }, ctx.Keywords!.Keywords);
+    }
+
+    [Fact]
+    public void Apply_PalavrasChaveMarker_AlsoRecognized()
+    {
+        var path = WriteFixture(
+            new[]
+            {
+                KeywordsParagraphFactory.CreateCommaSeparated(
+                    KeywordsParagraphFactory.DefaultPortugueseMarker,
+                    "K1", "K2"),
+            });
+
+        Apply(path);
+
+        var bodyText = ReadBodyText(path);
+        Assert.Contains(
+            "[kwdgrp language=\"en\"][sectitle]Palavras-chave:[/sectitle] "
+            + "[kwd]K1[/kwd], [kwd]K2[/kwd][/kwdgrp]",
+            bodyText);
+    }
+
+    [Fact]
+    public void Apply_NoKeywordsBlock_SkipsAndWarnsWithReasonCode()
+    {
+        var path = WriteFixture(
+            new[]
+            {
+                BuildPlainParagraph("Some body."),
+                BuildPlainParagraph("Another paragraph without keywords."),
+            });
+
+        var (ctx, report) = Apply(path);
+
+        Assert.Null(ctx.Keywords);
+        Assert.Contains(
+            report.Entries,
+            e => e.Rule == nameof(EmitKwdgrpTagRule)
+                && e.Level == ReportLevel.Warn
+                && e.Message == EmitKwdgrpTagRule.KeywordsBlockNotFoundMessage);
+
+        var bodyText = ReadBodyText(path);
+        Assert.DoesNotContain("[kwdgrp", bodyText);
+    }
+
+    [Fact]
+    public void Apply_DoesNotEmitAntiDuplicationListLiterals()
+    {
+        var path = WriteFixture(
+            new[]
+            {
+                KeywordsParagraphFactory.CreateCommaSeparated(
+                    KeywordsParagraphFactory.DefaultEnglishMarker,
+                    "K1", "K2", "K3"),
+            });
+
+        Apply(path);
+
+        var bodyText = ReadBodyText(path);
+        EmitElocationTagRuleTests.AssertNoAntiDuplicationLiterals(bodyText);
+    }
+
+    private (FormattingContext Ctx, IReport Report) Apply(string path)
+    {
+        var ctx = new FormattingContext();
+        var report = new Report();
+        using var doc = WordprocessingDocument.Open(path, isEditable: true);
+        var rule = new EmitKwdgrpTagRule();
+        rule.Apply(doc, ctx, report);
+        return (ctx, report);
+    }
+
+    private static Paragraph BuildPlainParagraph(string text)
+        => new(new Run(new Text(text) { Space = SpaceProcessingModeValues.Preserve }));
+
+    private static void AssertEachTagLiteralIsOwnRun(string path)
+    {
+        using var doc = WordprocessingDocument.Open(path, isEditable: false);
+        var body = doc.MainDocumentPart!.Document!.Body!;
+        var runTexts = new List<string>();
+        foreach (var p in body.Elements<Paragraph>())
+        {
+            foreach (var run in p.Elements<Run>())
+            {
+                var text = string.Concat(run.Descendants<Text>().Select(t => t.Text));
+                if (text.Length > 0)
+                {
+                    runTexts.Add(text);
+                }
+            }
+        }
+
+        // Each tag literal must live in its own Run so the VBA macro can
+        // assign a per-tag color.
+        Assert.Contains(runTexts, r => r.StartsWith("[kwdgrp", StringComparison.Ordinal) && !r.Contains("[sectitle", StringComparison.Ordinal));
+        Assert.Contains(runTexts, r => r == "[sectitle]");
+        Assert.Contains(runTexts, r => r == "[/sectitle]");
+        Assert.Contains(runTexts, r => r == "[kwd]");
+        Assert.Contains(runTexts, r => r == "[/kwd]");
+        Assert.Contains(runTexts, r => r == "[/kwdgrp]");
+    }
+
+    private string WriteFixture(IEnumerable<Paragraph> paragraphs)
+    {
+        var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.docx");
+        using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
+        var mainPart = doc.AddMainDocumentPart();
+        var body = new Body();
+        foreach (var p in paragraphs)
+        {
+            body.AppendChild(p);
+        }
+        mainPart.Document = new Document(body);
+        return path;
+    }
+
+    private static string ReadBodyText(string path)
+    {
+        using var doc = WordprocessingDocument.Open(path, isEditable: false);
+        var body = doc.MainDocumentPart!.Document!.Body!;
+        var lines = new List<string>();
+        foreach (var p in body.Elements<Paragraph>())
+        {
+            var text = string.Concat(p.Descendants<Text>().Select(t => t.Text));
+            lines.Add(text);
+        }
+        return string.Join("\n", lines);
+    }
+}

@@ -516,7 +516,42 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
 
         public string GetName() => _name.ToString();
 
-        public void AddLabel(string label) => Labels.Add(label);
+        public void AddLabel(string label)
+        {
+            // ADR-008: a label that is purely a corresp marker (currently '*')
+            // must merge onto the trailing affiliation label rather than form
+            // its own entry. RewriteHeaderMvpRule comma-joins the labels into a
+            // single superscript run, and Markup's mark_authors macro
+            // (markup_macros.txt:4799) treats ',' as an inter-author separator
+            // when the range has no ';'. Joining ["1", "*"] as "1,*" makes
+            // Markup mis-split at the comma and fail to auto-mark the author.
+            // Merging gives "1*" — same shape passing articles already produce.
+            if (IsCorrespMarker(label) && Labels.Count > 0)
+            {
+                Labels[^1] = Labels[^1] + label;
+                return;
+            }
+
+            Labels.Add(label);
+        }
+
+        private static bool IsCorrespMarker(string label)
+        {
+            if (string.IsNullOrEmpty(label))
+            {
+                return false;
+            }
+
+            foreach (var c in label)
+            {
+                if (c != '*')
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
         public void MarkLow(string warning)
         {

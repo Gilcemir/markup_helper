@@ -8,7 +8,8 @@ public sealed record DiagnosticDocument(
     DateTime ExtractedAt,
     DiagnosticFields Fields,
     DiagnosticFormatting? Formatting,
-    IReadOnlyList<DiagnosticIssue> Issues)
+    IReadOnlyList<DiagnosticIssue> Issues,
+    DiagnosticPhase2? Phase2 = null)
 {
     public bool Equals(DiagnosticDocument? other)
     {
@@ -27,7 +28,8 @@ public sealed record DiagnosticDocument(
             && ExtractedAt.Equals(other.ExtractedAt)
             && Fields.Equals(other.Fields)
             && Equals(Formatting, other.Formatting)
-            && Issues.SequenceEqual(other.Issues);
+            && Issues.SequenceEqual(other.Issues)
+            && Equals(Phase2, other.Phase2);
     }
 
     public override int GetHashCode()
@@ -42,7 +44,90 @@ public sealed record DiagnosticDocument(
         {
             hash.Add(issue);
         }
+        hash.Add(Phase2);
 
+        return hash.ToHashCode();
+    }
+}
+
+public sealed record DiagnosticPhase2(
+    DiagnosticField Elocation,
+    DiagnosticField Abstract,
+    DiagnosticField Keywords,
+    DiagnosticField Corresp,
+    IReadOnlyList<DiagnosticAuthorXref> Xref,
+    DiagnosticField Hist)
+{
+    public bool Equals(DiagnosticPhase2? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return Elocation.Equals(other.Elocation)
+            && Abstract.Equals(other.Abstract)
+            && Keywords.Equals(other.Keywords)
+            && Corresp.Equals(other.Corresp)
+            && Xref.SequenceEqual(other.Xref)
+            && Hist.Equals(other.Hist);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Elocation);
+        hash.Add(Abstract);
+        hash.Add(Keywords);
+        hash.Add(Corresp);
+        foreach (var xref in Xref)
+        {
+            hash.Add(xref);
+        }
+        hash.Add(Hist);
+        return hash.ToHashCode();
+    }
+}
+
+public sealed record DiagnosticAuthorXref(
+    int AuthorIndex,
+    IReadOnlyList<string> Affiliations,
+    bool Corresp,
+    bool HasAuthorid)
+{
+    public bool Equals(DiagnosticAuthorXref? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return AuthorIndex == other.AuthorIndex
+            && Corresp == other.Corresp
+            && HasAuthorid == other.HasAuthorid
+            && Affiliations.SequenceEqual(other.Affiliations, StringComparer.Ordinal);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(AuthorIndex);
+        hash.Add(Corresp);
+        hash.Add(HasAuthorid);
+        foreach (var aff in Affiliations)
+        {
+            hash.Add(aff, StringComparer.Ordinal);
+        }
         return hash.ToHashCode();
     }
 }

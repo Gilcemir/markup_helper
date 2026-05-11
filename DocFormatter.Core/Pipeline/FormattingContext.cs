@@ -1,4 +1,5 @@
 using DocFormatter.Core.Models;
+using DocFormatter.Core.Models.Phase2;
 using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocFormatter.Core.Pipeline;
@@ -40,4 +41,25 @@ public sealed class FormattingContext
     public string? CorrespondingOrcid { get; set; }
 
     public int? CorrespondingAuthorIndex { get; set; }
+
+    // Phase 2 cross-rule references (task 06). Each emitter populates the
+    // matching field when it locates its target; downstream consumers (e.g.
+    // diagnostic builders) read whichever fields the upstream rules managed
+    // to fill. Null indicates skip-and-warn (ADR-002), not "rule did not run".
+    public AbstractMarker? Abstract { get; set; }
+
+    public KeywordsGroup? Keywords { get; set; }
+
+    // Phase 3 cross-rule references (task 07). Affiliations is the parsed
+    // [normaff id="aff…"] / [xref ref-type="aff" rid="aff…"] inventory that
+    // EmitAuthorXrefsRule discovers in the body; CorrespAuthor is the wrap
+    // target for EmitCorrespTagRule. Both are nullable per ADR-002.
+    public IReadOnlyList<Affiliation>? Affiliations { get; set; }
+
+    public CorrespAuthor? CorrespAuthor { get; set; }
+
+    // Phase 4 cross-rule reference (task 09). Populated by EmitHistTagRule
+    // when the [hist] block was emitted (at minimum a Received date was
+    // parsed). Null indicates skip-and-warn (ADR-002), not "rule did not run".
+    public HistoryDates? History { get; set; }
 }

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using DocFormatter.Core.Models;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Rules;
+using DocFormatter.Core.Rules.Phase2;
 
 namespace DocFormatter.Core.Reporting;
 
@@ -59,7 +60,140 @@ public static class DiagnosticWriter
             ExtractedAt: TruncateToSeconds(extractedAt),
             Fields: BuildFields(ctx),
             Formatting: BuildFormatting(report),
-            Issues: BuildIssues(report));
+            Issues: BuildIssues(report),
+            Phase2: BuildPhase2(ctx, report));
+    }
+
+    private static DiagnosticPhase2? BuildPhase2(FormattingContext ctx, IReport report)
+    {
+        var elocationEntries = FilterByRule(report, nameof(EmitElocationTagRule));
+        var abstractEntries = FilterByRule(report, nameof(EmitAbstractTagRule));
+        var keywordsEntries = FilterByRule(report, nameof(EmitKwdgrpTagRule));
+        var correspEntries = FilterByRule(report, nameof(EmitCorrespTagRule));
+        var authorXrefEntries = FilterByRule(report, nameof(EmitAuthorXrefsRule));
+        var histEntries = FilterByRule(report, nameof(EmitHistTagRule));
+
+        if (elocationEntries.Count == 0
+            && abstractEntries.Count == 0
+            && keywordsEntries.Count == 0
+            && correspEntries.Count == 0
+            && authorXrefEntries.Count == 0
+            && histEntries.Count == 0)
+        {
+            return null;
+        }
+
+        return new DiagnosticPhase2(
+            Elocation: BuildElocationDiagnostic(ctx, elocationEntries),
+            Abstract: BuildAbstractDiagnostic(ctx, abstractEntries),
+            Keywords: BuildKeywordsDiagnostic(ctx, keywordsEntries),
+            Corresp: BuildCorrespDiagnostic(ctx, correspEntries),
+            Xref: BuildAuthorXrefDiagnostic(ctx, authorXrefEntries),
+            Hist: BuildHistDiagnostic(ctx, histEntries));
+    }
+
+    private static DiagnosticField BuildHistDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        // Skip-and-warn on Received (the only required child) blocks any
+        // emission — see EmitHistTagRule.{HistReceivedMissingMessage,
+        // HistReceivedUnparseableMessage}. Optional warns about Accepted or
+        // Published unparseability do not zero out the diagnostic because the
+        // rule still emitted a [hist] block with Received.
+        var receivedFailed = HasWarnMessage(entries, EmitHistTagRule.HistReceivedMissingMessage)
+            || HasWarnMessage(entries, EmitHistTagRule.HistReceivedUnparseableMessage);
+        if (receivedFailed || ctx.History is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        var parts = new List<string>(3) { $"received={ctx.History.Received.ToDateIso()}" };
+        if (ctx.History.Accepted is not null)
+        {
+            parts.Add($"accepted={ctx.History.Accepted.ToDateIso()}");
+        }
+        if (ctx.History.Published is not null)
+        {
+            parts.Add($"published={ctx.History.Published.ToDateIso()}");
+        }
+        return new DiagnosticField(string.Join(",", parts), FieldConfidence.High);
+    }
+
+    private static DiagnosticField BuildCorrespDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.CorrespAuthor is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        var summary = ctx.CorrespAuthor.Email ?? ctx.CorrespAuthor.Orcid ?? "c1";
+        return new DiagnosticField(summary, FieldConfidence.High);
+    }
+
+    private static IReadOnlyList<DiagnosticAuthorXref> BuildAuthorXrefDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.Authors.Count == 0)
+        {
+            return Array.Empty<DiagnosticAuthorXref>();
+        }
+
+        var result = new List<DiagnosticAuthorXref>(ctx.Authors.Count);
+        for (var i = 0; i < ctx.Authors.Count; i++)
+        {
+            var author = ctx.Authors[i];
+            result.Add(new DiagnosticAuthorXref(
+                AuthorIndex: i,
+                Affiliations: author.AffiliationLabels.ToArray(),
+                Corresp: ctx.CorrespondingAuthorIndex == i,
+                HasAuthorid: !string.IsNullOrEmpty(author.OrcidId)));
+        }
+        return result;
+    }
+
+    private static DiagnosticField BuildElocationDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries))
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        return string.IsNullOrEmpty(ctx.ElocationId)
+            ? new DiagnosticField(null, FieldConfidence.Missing)
+            : new DiagnosticField(ctx.ElocationId, FieldConfidence.High);
+    }
+
+    private static DiagnosticField BuildAbstractDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.Abstract is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        return new DiagnosticField(ctx.Abstract.Language, FieldConfidence.High);
+    }
+
+    private static DiagnosticField BuildKeywordsDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        if (HasWarnOrError(entries) || ctx.Keywords is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        var summary = string.Join(", ", ctx.Keywords.Keywords);
+        return new DiagnosticField(
+            string.IsNullOrEmpty(summary) ? ctx.Keywords.Language : summary,
+            FieldConfidence.High);
     }
 
     public static JsonSerializerOptions JsonOptions => SerializerOptions;

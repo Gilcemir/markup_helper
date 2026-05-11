@@ -63,6 +63,19 @@ decide about X?"*.
 Pipeline, project layout, frameworks/runtime, structural cross-cutting
 decisions.
 
+- **Phase 2 pipeline reuse** — Same `FormattingPipeline` +
+  `IFormattingRule` + `FormattingContext`; Phase 2 rules live under
+  `Rules/Phase2/` and rule sets compose via `AddPhase1Rules` /
+  `AddPhase2Rules` DI extension methods.
+  → phase-2-tagging-author-fixes/adr-004
+- **Phase 2 rollout strategy** — Incremental "help SciELO Markup, don't
+  replace it" approach across 4 phases (author fix → easy tags → author
+  xrefs → `[hist]`); rejects full Stage-2 replacement and big-bang
+  delivery. → phase-2-tagging-author-fixes/adr-001
+- **Phase 2 rule failure policy** — A heuristic that cannot identify
+  its target with high confidence MUST skip insertion and record a
+  machine-readable reason code in `diagnostic.json`; never abort, never
+  emit partial markup. → phase-2-tagging-author-fixes/adr-002
 - **Pipeline architecture (MVP)** — 4 sibling rules (one per extracted
   field), not a single consolidated rule. Establishes the pattern for
   later phases. → metadata/adr-001
@@ -90,9 +103,23 @@ Text extraction, tokenization, heuristics and regex for field detection
 - **Corresponding-author tokenization** — `* E-mail:` marker + email
   regex, two-pass; strips the `* E-mail: … ORCID: …` trailer from the
   affiliation. → polish/adr-003
+- **HistDateParser phrase inventory** — Recognized date shapes
+  catalogued from `AccessedOnHandler.cs` plus the SciELO `before/`
+  corpus, extended with ISO / year-only / English-abbrev forms; TDD
+  source of truth for the Phase 4 parser.
+  → phase-2-tagging-author-fixes/adr-007-phrase-inventory
+- **`mark_authors` 5313/5449 fix** — `AuthorBuilder.AddLabel` merges a
+  pure-`*` label onto the trailing affiliation digit (`1,*` → `1*`)
+  so Markup's `mark_authors` macro stops misreading the joined comma
+  as an inter-author separator. → phase-2-tagging-author-fixes/adr-008
 - **ORCID extraction** — Extracts (does not remove) ORCID URLs from
   the authors line and stores in metadata; intentional divergence from
   the MVP spec. → metadata/adr-003
+- **Phase 4 date parser** — Rewrite `HistDateParser` from scratch in
+  DocFormatter conventions; treat
+  `Marcador_de_referencia/BibliographyHandlers/AccessedOnHandler.cs`
+  as algorithmic reference only — no code copy, no vendor submodule.
+  → phase-2-tagging-author-fixes/adr-007
 - **Section detection without font size** — Section / sub-section
   predicate ignores font size; uses bold + caps + alignment only.
   → section/adr-003
@@ -126,6 +153,19 @@ CLI surface, diagnostic output, build/CI, output file layout.
   change the extraction fields. → polish/adr-004
 - **Diagnostic JSON schema** — Per-field with `confidence` + `issues`
   list, not issues-only. → metadata/adr-004
+- **Phase 2 diff gate** — Each release passes only when all 10
+  `examples/phase-2/{before,after}/` pairs match within the cumulative
+  in-scope tag set; failure descopes the release or amends the corpus
+  with justification. → phase-2-tagging-author-fixes/adr-003
+- **Phase 2 diff utility** — Body-text extraction preserving SciELO
+  `[tag]` literals; out-of-scope tag pairs symmetrically stripped
+  (brackets gone, inner content kept) before string compare; first
+  divergence reported with ±80 chars of context.
+  → phase-2-tagging-author-fixes/adr-006
+- **`phase2` / `phase2-verify` CLI** — Hand-rolled subcommand
+  dispatcher inside `CliApp.Run` extends the existing parser; rejects
+  `System.CommandLine` migration as scope creep.
+  → phase-2-tagging-author-fixes/adr-005
 
 ---
 
@@ -140,6 +180,11 @@ was decided during feature X?"*.
 - [header-metadata-extraction/](header-metadata-extraction/) — 6 ADRs —
   DocFormatter MVP: header extraction and rewrite (DOI, title, authors,
   ELOCATION) plus the initial architecture.
+- [phase-2-tagging-author-fixes/](phase-2-tagging-author-fixes/) — 9
+  ADRs — Phase 2: pre-mark SciELO XML 4.0 Stage-2 tags (`elocation`,
+  `xmlabstr`, `kwdgrp`, author xrefs/`authorid`/`corresp`, `[hist]`
+  with date parsing) plus a Stage-1 fix for `mark_authors` on
+  5313/5449.
 - [section-formatting-and-history-move/](section-formatting-and-history-move/)
   — 5 ADRs — Phase 3: move history block, visually promote section /
   sub-section, INV-01 (strict content preservation).
