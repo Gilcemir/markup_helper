@@ -55,7 +55,8 @@ public sealed record DiagnosticPhase2(
     DiagnosticField Abstract,
     DiagnosticField Keywords,
     DiagnosticField Corresp,
-    IReadOnlyList<DiagnosticAuthorXref> Xref)
+    IReadOnlyList<DiagnosticAuthorXref> Xref,
+    DiagnosticField Hist)
 {
     public bool Equals(DiagnosticPhase2? other)
     {
@@ -73,7 +74,8 @@ public sealed record DiagnosticPhase2(
             && Abstract.Equals(other.Abstract)
             && Keywords.Equals(other.Keywords)
             && Corresp.Equals(other.Corresp)
-            && Xref.SequenceEqual(other.Xref);
+            && Xref.SequenceEqual(other.Xref)
+            && Hist.Equals(other.Hist);
     }
 
     public override int GetHashCode()
@@ -87,6 +89,7 @@ public sealed record DiagnosticPhase2(
         {
             hash.Add(xref);
         }
+        hash.Add(Hist);
         return hash.ToHashCode();
     }
 }

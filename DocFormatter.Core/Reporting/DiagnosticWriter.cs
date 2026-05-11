@@ -71,12 +71,14 @@ public static class DiagnosticWriter
         var keywordsEntries = FilterByRule(report, nameof(EmitKwdgrpTagRule));
         var correspEntries = FilterByRule(report, nameof(EmitCorrespTagRule));
         var authorXrefEntries = FilterByRule(report, nameof(EmitAuthorXrefsRule));
+        var histEntries = FilterByRule(report, nameof(EmitHistTagRule));
 
         if (elocationEntries.Count == 0
             && abstractEntries.Count == 0
             && keywordsEntries.Count == 0
             && correspEntries.Count == 0
-            && authorXrefEntries.Count == 0)
+            && authorXrefEntries.Count == 0
+            && histEntries.Count == 0)
         {
             return null;
         }
@@ -86,7 +88,36 @@ public static class DiagnosticWriter
             Abstract: BuildAbstractDiagnostic(ctx, abstractEntries),
             Keywords: BuildKeywordsDiagnostic(ctx, keywordsEntries),
             Corresp: BuildCorrespDiagnostic(ctx, correspEntries),
-            Xref: BuildAuthorXrefDiagnostic(ctx, authorXrefEntries));
+            Xref: BuildAuthorXrefDiagnostic(ctx, authorXrefEntries),
+            Hist: BuildHistDiagnostic(ctx, histEntries));
+    }
+
+    private static DiagnosticField BuildHistDiagnostic(
+        FormattingContext ctx,
+        IReadOnlyList<ReportEntry> entries)
+    {
+        // Skip-and-warn on Received (the only required child) blocks any
+        // emission — see EmitHistTagRule.{HistReceivedMissingMessage,
+        // HistReceivedUnparseableMessage}. Optional warns about Accepted or
+        // Published unparseability do not zero out the diagnostic because the
+        // rule still emitted a [hist] block with Received.
+        var receivedFailed = HasWarnMessage(entries, EmitHistTagRule.HistReceivedMissingMessage)
+            || HasWarnMessage(entries, EmitHistTagRule.HistReceivedUnparseableMessage);
+        if (receivedFailed || ctx.History is null)
+        {
+            return new DiagnosticField(null, FieldConfidence.Missing);
+        }
+
+        var parts = new List<string>(3) { $"received={ctx.History.Received.ToDateIso()}" };
+        if (ctx.History.Accepted is not null)
+        {
+            parts.Add($"accepted={ctx.History.Accepted.ToDateIso()}");
+        }
+        if (ctx.History.Published is not null)
+        {
+            parts.Add($"published={ctx.History.Published.ToDateIso()}");
+        }
+        return new DiagnosticField(string.Join(",", parts), FieldConfidence.High);
     }
 
     private static DiagnosticField BuildCorrespDiagnostic(

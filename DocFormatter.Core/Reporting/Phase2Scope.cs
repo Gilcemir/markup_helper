@@ -12,11 +12,14 @@ namespace DocFormatter.Core.Reporting;
 ///
 /// <para>
 /// Task 07 adds <c>xref</c>, <c>authorid</c>, and <c>corresp</c> — the three
-/// tags whose attributes/structure the new rules now control. <c>author</c>,
-/// <c>fname</c>, <c>surname</c> and <c>normaff</c> remain OUT of scope per
-/// ADR-001 anti-duplication: SciELO Markup auto-marks them and Phase 2 must
-/// not pre-mark. The symmetric content-keep strip handles those tags by
-/// peeling wrappers on both sides; the diff aligns on the inner plain text.
+/// tags whose attributes/structure the new rules now control. Task 09 adds
+/// <c>hist</c>, <c>histdate</c>, <c>received</c>, and <c>accepted</c> — the
+/// Phase 4 history block whose structure and <c>dateiso</c> attribute the
+/// new <c>EmitHistTagRule</c> now owns. <c>author</c>, <c>fname</c>,
+/// <c>surname</c> and <c>normaff</c> remain OUT of scope per ADR-001
+/// anti-duplication: SciELO Markup auto-marks them and Phase 2 must not
+/// pre-mark. The symmetric content-keep strip handles those tags by peeling
+/// wrappers on both sides; the diff aligns on the inner plain text.
 /// </para>
 ///
 /// <para>
@@ -29,7 +32,7 @@ public static class Phase2Scope
     public static readonly IReadOnlySet<string> Current = new HashSet<string>(StringComparer.Ordinal)
     {
         // Stage-1 baseline whose structure already matches between
-        // before/<id>.docx and after/<id>.docx (no Phase 4 attrs in flight).
+        // before/<id>.docx and after/<id>.docx.
         "doc",
         "doctitle",
         "doi",
@@ -45,5 +48,11 @@ public static class Phase2Scope
         "authorid",
         "corresp",
         "xref",
+
+        // Task 09 emitter (Phase 4 [hist] block).
+        "accepted",
+        "hist",
+        "histdate",
+        "received",
     };
 }

@@ -149,6 +149,63 @@ public sealed class Phase2PipelineIntegrationTests : IDisposable
         Assert.Contains("\"elocation\"", json);
         Assert.Contains("\"abstract\"", json);
         Assert.Contains("\"keywords\"", json);
+        Assert.Contains("\"hist\"", json);
+    }
+
+    [Fact]
+    public void Run_Phase2_OnSyntheticHistoryFixture_EmitsHistBlockInStrictOrder()
+    {
+        // Phase 2 + Phase 4 end-to-end: synthetic fixture combining the
+        // abstract/keywords/history paragraphs covered by EmitAbstractTagRule,
+        // EmitKwdgrpTagRule, and EmitHistTagRule. Asserts the [hist] literal
+        // wraps the three Received/Accepted/Published paragraphs in strict
+        // DTD ordering and that the surrounding Phase 2 emitters still fire.
+        var sourcePath = Path.Combine(_tempDir, "hist-synthetic.docx");
+        WriteSyntheticWithHistory(sourcePath);
+
+        var exit = CliApp.Run(
+            new[] { "phase2", sourcePath },
+            new StringWriter(),
+            new StringWriter());
+
+        Assert.Equal(CliApp.ExitSuccess, exit);
+
+        var producedPath = Path.Combine(_tempDir, "formatted-phase2", "hist-synthetic.docx");
+        Assert.True(File.Exists(producedPath));
+
+        var bodyText = ReadBodyText(producedPath);
+
+        // Hist block: opening on the Received paragraph, child wraps on each
+        // of the three dated paragraphs, closing on the Published paragraph.
+        Assert.Contains(
+            "[hist]Received: [received dateiso=\"20240312\"]12 March 2024[/received]",
+            bodyText);
+        Assert.Contains(
+            "Accepted: [accepted dateiso=\"20240415\"]15 April 2024[/accepted]",
+            bodyText);
+        Assert.Contains(
+            "Published: [histdate dateiso=\"20240501\" datetype=\"pub\"]01 May 2024[/histdate][/hist]",
+            bodyText);
+
+        // Other Phase 2 emitters still fire on the same fixture.
+        Assert.Contains("[xmlabstr language=\"en\"]Abstract", bodyText);
+        Assert.Contains("[kwdgrp language=\"en\"]Keywords: K1, K2, K3[/kwdgrp]", bodyText);
+    }
+
+    private static void WriteSyntheticWithHistory(string path)
+    {
+        using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
+        var mainPart = doc.AddMainDocumentPart();
+        var body = new Body(
+            BuildPlainParagraph(DocOpening),
+            BuildPlainParagraph("e51362627"),
+            BuildPlainParagraph("Abstract"),
+            BuildPlainParagraph("Body of the abstract."),
+            BuildPlainParagraph("Keywords: K1, K2, K3"),
+            BuildPlainParagraph("Received: 12 March 2024"),
+            BuildPlainParagraph("Accepted: 15 April 2024"),
+            BuildPlainParagraph("Published: 01 May 2024"));
+        mainPart.Document = new Document(body);
     }
 
     private static void WriteThreeAuthorFixture(string path)

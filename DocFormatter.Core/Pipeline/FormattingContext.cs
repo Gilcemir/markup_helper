@@ -57,4 +57,9 @@ public sealed class FormattingContext
     public IReadOnlyList<Affiliation>? Affiliations { get; set; }
 
     public CorrespAuthor? CorrespAuthor { get; set; }
+
+    // Phase 4 cross-rule reference (task 09). Populated by EmitHistTagRule
+    // when the [hist] block was emitted (at minimum a Received date was
+    // parsed). Null indicates skip-and-warn (ADR-002), not "rule did not run".
+    public HistoryDates? History { get; set; }
 }

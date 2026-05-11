@@ -83,7 +83,7 @@ public sealed class RuleRegistrationTests
     }
 
     [Fact]
-    public void AddPhase2Rules_AtTask07_RegistersFiveEmittersInPipelineOrder()
+    public void AddPhase2Rules_AtTask09_RegistersSixEmittersInPipelineOrder()
     {
         var services = new ServiceCollection();
         services.AddSingleton<FormattingOptions>();
@@ -101,6 +101,7 @@ public sealed class RuleRegistrationTests
                 typeof(EmitKwdgrpTagRule),
                 typeof(EmitAuthorXrefsRule),
                 typeof(EmitCorrespTagRule),
+                typeof(EmitHistTagRule),
             },
             ruleTypes);
     }
@@ -116,7 +117,7 @@ public sealed class RuleRegistrationTests
             .Where(d => d.ServiceType == typeof(IFormattingRule))
             .ToArray();
 
-        Assert.Equal(5, ruleDescriptors.Length);
+        Assert.Equal(6, ruleDescriptors.Length);
         Assert.All(ruleDescriptors, d => Assert.Equal(ServiceLifetime.Transient, d.Lifetime));
     }
 

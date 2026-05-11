@@ -49,6 +49,13 @@ public static class RuleRegistration
         services.AddTransient<IFormattingRule, EmitAuthorXrefsRule>();
         services.AddTransient<IFormattingRule, EmitCorrespTagRule>();
 
+        // Task 09 emitter (Phase 4 [hist] block). Independent of the other
+        // Phase 2 rules — operates on the Received/Accepted/Published
+        // paragraphs that Phase 1's MoveHistoryRule already placed before
+        // the INTRODUCTION anchor. Order within AddPhase2Rules is
+        // documentation-only.
+        services.AddTransient<IFormattingRule, EmitHistTagRule>();
+
         return services;
     }
 }
