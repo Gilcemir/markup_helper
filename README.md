@@ -40,6 +40,15 @@ docformatter "C:\caminho\artigo.docx"
 # Formatar todos os .docx de uma pasta (não-recursivo)
 docformatter "C:\caminho\pasta"
 # → cria pasta\formatted\ com saídas + _batch_summary.txt + _app.log
+
+# Phase 2: rodar pipeline de tagging (abstract/keywords/elocation/corresp/hist/author-xrefs)
+docformatter phase2 "C:\caminho\artigo.docx"
+docformatter phase2 "C:\caminho\pasta"
+# → saídas em formatted-phase2/ ao invés de formatted/
+
+# Phase 2 verify: diff scoped contra um corpus AFTER curado (gate de release)
+docformatter phase2-verify "C:\caminho\before" "C:\caminho\after"
+# → imprime [PASS] <id> / [FAIL] <id> por par; exit 3 se algum par diverge
 ```
 
 Saída padrão da pasta `formatted/`:
@@ -56,9 +65,10 @@ Saída padrão da pasta `formatted/`:
 
 | Código | Significado |
 |---|---|
-| `0` | sucesso (com ou sem warnings) |
+| `0` | sucesso (com ou sem warnings; `phase2-verify` com todos os pares PASS) |
 | `1` | erro de uso (argumento, flag desconhecida, caminho inexistente, extensão errada) |
 | `2` | abort crítico do pipeline (modo single-file) |
+| `3` | `phase2-verify` divergiu em pelo menos um par |
 
 ### Atualizar
 
@@ -87,11 +97,15 @@ make test-watch      # dotnet watch test
 make run FILE=examples/1_AR_5449_2.docx   # CLI em arquivo único
 make run-all                              # CLI em modo batch sobre examples/
 
+make phase2 FILE=examples/phase-2/before/5449.docx   # Phase 2 pipeline em um arquivo
+make phase2-all                                      # Phase 2 em batch sobre examples/phase-2/before/
+make phase2-verify                                   # diff scoped before/ vs after/ (gate de release)
+
 make publish-mac     # binário osx-arm64 self-contained pra dev local
 make publish-win     # delega pra DocFormatter.Cli/publish.sh (win-x64)
 
 make logs            # tail no _app.log mais recente sob examples/
-make clean           # limpa bin/, obj/, e formatted/ de examples/
+make clean           # limpa bin/, obj/, formatted/ e formatted-phase2/ de examples/
 ```
 
 ### Estrutura do solution
