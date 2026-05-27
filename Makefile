@@ -7,12 +7,15 @@ EXAMPLES    := examples
 DEFAULT_FILE := $(EXAMPLES)/1_AR_5449_2.docx
 PHASE2_BEFORE := $(EXAMPLES)/phase-2/before
 PHASE2_AFTER  := $(EXAMPLES)/phase-2/after
+PHASE3_PACKAGE     := $(EXAMPLES)/phase-3/scielo_package
+PHASE3_DEFAULT_XML := $(PHASE3_PACKAGE)/1984-7033-cbab-26-02-e54342625.xml
 MAC_PUBLISH := $(CLI_PROJECT)/bin/Release/net10.0/osx-arm64/publish
 MAC_BIN     := $(MAC_PUBLISH)/docformatter
 
 FILE ?= $(DEFAULT_FILE)
+XML  ?= $(PHASE3_DEFAULT_XML)
 
-.PHONY: help build test test-watch run run-all phase2 phase2-all phase2-verify publish-mac publish-win release clean format logs
+.PHONY: help build test test-watch run run-all phase2 phase2-all phase2-verify phase3 phase3-all phase3-all-interactive publish-mac publish-win release clean format logs
 
 help:
 	@echo "Targets:"
@@ -24,12 +27,15 @@ help:
 	@echo "  phase2             run Phase 2 pipeline on FILE=<path> (default: $(DEFAULT_FILE))"
 	@echo "  phase2-all         run Phase 2 pipeline in batch mode on $(PHASE2_BEFORE)/"
 	@echo "  phase2-verify      diff Phase 2 output of $(PHASE2_BEFORE) against $(PHASE2_AFTER)"
+	@echo "  phase3             run Phase 3 JATS injection on XML=<path> (default: $(PHASE3_DEFAULT_XML))"
+	@echo "  phase3-all         run Phase 3 in batch mode on $(PHASE3_PACKAGE)/ (non-interactive accept)"
+	@echo "  phase3-all-interactive  run Phase 3 batch on $(PHASE3_PACKAGE)/, prompting each decision"
 	@echo "  publish-mac        self-contained osx-arm64 binary -> $(MAC_BIN)"
 	@echo "  publish-win        delegate to $(CLI_PROJECT)/publish.sh"
 	@echo "  release VERSION=vX.Y.Z   tag and push, triggering the CI release workflow"
 	@echo "  format             dotnet format"
 	@echo "  logs               tail latest formatted/_app.log under $(EXAMPLES)/"
-	@echo "  clean              remove bin/, obj/, $(EXAMPLES)/**/formatted/, and $(EXAMPLES)/**/formatted-phase2/"
+	@echo "  clean              remove bin/, obj/, $(EXAMPLES)/**/formatted/, formatted-phase2/, and formatted-phase3/"
 
 build:
 	dotnet build $(SOLUTION)
@@ -54,6 +60,15 @@ phase2-all:
 
 phase2-verify:
 	dotnet run --project $(CLI_PROJECT) -- phase2-verify "$(PHASE2_BEFORE)" "$(PHASE2_AFTER)"
+
+phase3:
+	dotnet run --project $(CLI_PROJECT) -- phase3 "$(XML)"
+
+phase3-all:
+	dotnet run --project $(CLI_PROJECT) -- phase3 "$(PHASE3_PACKAGE)" --non-interactive=accept
+
+phase3-all-interactive:
+	dotnet run --project $(CLI_PROJECT) -- phase3 "$(PHASE3_PACKAGE)"
 
 publish-mac:
 	dotnet publish $(CLI_PROJECT) \
@@ -104,5 +119,5 @@ clean:
 	dotnet clean $(SOLUTION) || true
 	find . -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} +
 	if [ -d "$(EXAMPLES)" ]; then \
-		find "$(EXAMPLES)" -type d \( -name formatted -o -name formatted-phase2 \) -prune -exec rm -rf {} +; \
+		find "$(EXAMPLES)" -type d \( -name formatted -o -name formatted-phase2 -o -name formatted-phase3 \) -prune -exec rm -rf {} +; \
 	fi

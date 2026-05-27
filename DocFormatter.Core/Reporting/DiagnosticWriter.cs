@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Xml.Linq;
+using DocFormatter.Core.Jats;
 using DocFormatter.Core.Models;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Rules;
@@ -63,6 +65,224 @@ public static class DiagnosticWriter
             Issues: BuildIssues(report),
             Phase2: BuildPhase2(ctx, report));
     }
+
+    // Phase 3 injector report labels (= IJatsInjector.Name). Kept here because the
+    // injectors expose their name only as an instance property; the diagnostic
+    // reconstructs per-tag state by filtering the report on these labels.
+    private const string OtherIdTag = "other-id";
+    private const string EditedByTag = "edited-by";
+    private const string DataAvailabilityTag = "data-availability";
+    private const string CreditRolesTag = "credit-roles";
+
+    /// <summary>
+    /// Writes the Phase 3 (<c>phase3</c>) diagnostic for an injected XML document.
+    /// Like <see cref="Write(string, string, FormattingContext, IReport)"/>, the
+    /// file is only written when the report reaches <see cref="ReportLevel.Warn"/>
+    /// (TechSpec "Monitoring and Observability").
+    /// </summary>
+    /// <param name="recordedDispositions">
+    /// The <see cref="ConfirmDisposition"/> captured for each tag that reached the
+    /// confirmer gate, keyed by injector name; tags absent here did not prompt and
+    /// their disposition is inferred from the report.
+    /// </param>
+    public static bool WritePhase3(
+        string filePath,
+        string sourceFileName,
+        XDocument xml,
+        IReport report,
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions)
+        => WritePhase3(filePath, sourceFileName, xml, report, recordedDispositions, DateTime.UtcNow);
+
+    public static bool WritePhase3(
+        string filePath,
+        string sourceFileName,
+        XDocument xml,
+        IReport report,
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions,
+        DateTime extractedAt)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(filePath);
+        ArgumentException.ThrowIfNullOrEmpty(sourceFileName);
+        ArgumentNullException.ThrowIfNull(xml);
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(recordedDispositions);
+
+        if (report.HighestLevel < ReportLevel.Warn)
+        {
+            return false;
+        }
+
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var document = BuildPhase3Document(sourceFileName, xml, report, recordedDispositions, extractedAt);
+        var json = JsonSerializer.Serialize(document, SerializerOptions);
+        File.WriteAllText(filePath, json);
+        return true;
+    }
+
+    /// <summary>
+    /// Builds the Phase 3 diagnostic document: the standard envelope (status,
+    /// issues, and the article's DOI/elocation read straight from the injected
+    /// XML) plus the four-tag <see cref="DiagnosticPhase3"/> section.
+    /// </summary>
+    public static DiagnosticDocument BuildPhase3Document(
+        string sourceFileName,
+        XDocument xml,
+        IReport report,
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions,
+        DateTime extractedAt)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sourceFileName);
+        ArgumentNullException.ThrowIfNull(xml);
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(recordedDispositions);
+
+        return new DiagnosticDocument(
+            File: sourceFileName,
+            Status: MapStatus(report.HighestLevel),
+            ExtractedAt: TruncateToSeconds(extractedAt),
+            Fields: BuildPhase3Fields(xml),
+            Formatting: null,
+            Issues: BuildIssues(report),
+            Phase2: null,
+            Phase3: BuildPhase3(xml, report, recordedDispositions));
+    }
+
+    private static DiagnosticFields BuildPhase3Fields(XDocument xml)
+    {
+        var articleMeta = xml.Root
+            ?.Elements().FirstOrDefault(e => e.Name.LocalName == "front")
+            ?.Elements().FirstOrDefault(e => e.Name.LocalName == "article-meta");
+
+        string? Direct(string localName) => articleMeta
+            ?.Elements().FirstOrDefault(e => e.Name.LocalName == localName)?.Value.Trim();
+
+        var doi = articleMeta
+            ?.Elements().FirstOrDefault(e =>
+                e.Name.LocalName == "article-id"
+                && string.Equals((string?)e.Attribute("pub-id-type"), "doi", StringComparison.Ordinal))
+            ?.Value.Trim();
+
+        var titleGroup = articleMeta
+            ?.Elements().FirstOrDefault(e => e.Name.LocalName == "title-group");
+        var title = titleGroup
+            ?.Elements().FirstOrDefault(e => e.Name.LocalName == "article-title")?.Value.Trim();
+
+        return new DiagnosticFields(
+            Doi: BuildExtractedField(doi),
+            Elocation: BuildExtractedField(Direct("elocation-id")),
+            Title: BuildExtractedField(title),
+            Authors: Array.Empty<DiagnosticAuthor>());
+    }
+
+    private static DiagnosticPhase3 BuildPhase3(
+        XDocument xml,
+        IReport report,
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions)
+    {
+        return new DiagnosticPhase3(
+            OtherId: BuildPhase3Tag(OtherIdTag, ReadOtherIdValue(xml), report, recordedDispositions),
+            EditedBy: BuildPhase3Tag(EditedByTag, ReadEditedByValue(xml), report, recordedDispositions),
+            DataAvailability: BuildPhase3Tag(
+                DataAvailabilityTag, ReadDataAvailabilityValue(xml), report, recordedDispositions),
+            CreditRoles: BuildPhase3Tag(CreditRolesTag, ReadCreditRolesValue(xml), report, recordedDispositions));
+    }
+
+    private static DiagnosticPhase3Tag BuildPhase3Tag(
+        string tag,
+        string? value,
+        IReport report,
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions)
+    {
+        var entries = FilterByRule(report, tag);
+        return new DiagnosticPhase3Tag(tag, value, ResolvePhase3Disposition(tag, entries, recordedDispositions));
+    }
+
+    // The disposition reflects the actual write outcome, not just the gate vote: a
+    // tag the injector declined to write (e.g. free-prose CREDIT) is "skipped" even
+    // though the confirmer returned AutoApplied. A pipeline error is "failed"; a
+    // tag actually written carries its real ConfirmDisposition when it reached the
+    // gate, else "autoApplied" (deterministic); a reported skip (warn or idempotent
+    // already-present) is "skipped"; anything else is "absent".
+    private static string ResolvePhase3Disposition(
+        string tag,
+        IReadOnlyList<ReportEntry> entries,
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions)
+    {
+        if (entries.Any(e => e.Level == ReportLevel.Error))
+        {
+            return "failed";
+        }
+
+        var applied = entries.Any(e =>
+            e.Level == ReportLevel.Info
+            && (e.Message.StartsWith("Inserted", StringComparison.Ordinal)
+                || e.Message.StartsWith("Injected", StringComparison.Ordinal)));
+
+        if (applied)
+        {
+            return recordedDispositions.TryGetValue(tag, out var disposition)
+                ? ToCamelCase(disposition.ToString())
+                : "autoApplied";
+        }
+
+        if (entries.Any(e => e.Level == ReportLevel.Warn)
+            || entries.Any(e => e.Message.Contains("already present", StringComparison.Ordinal)))
+        {
+            return "skipped";
+        }
+
+        return "absent";
+    }
+
+    private static string? ReadOtherIdValue(XDocument xml)
+    {
+        var value = xml.Descendants()
+            .FirstOrDefault(e =>
+                e.Name.LocalName == "article-id"
+                && string.Equals((string?)e.Attribute("pub-id-type"), "other", StringComparison.Ordinal))
+            ?.Value.Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private static string? ReadEditedByValue(XDocument xml)
+    {
+        var names = xml.Descendants()
+            .Where(e =>
+                e.Name.LocalName == "fn"
+                && string.Equals((string?)e.Attribute("fn-type"), "edited-by", StringComparison.Ordinal))
+            .Select(fn => fn.Elements().FirstOrDefault(c => c.Name.LocalName == "p")?.Value.Trim())
+            .Where(p => !string.IsNullOrEmpty(p))
+            .ToArray();
+        return names.Length == 0 ? null : string.Join("; ", names);
+    }
+
+    private static string? ReadDataAvailabilityValue(XDocument xml)
+    {
+        var specificUse = xml.Descendants()
+            .FirstOrDefault(e =>
+                e.Name.LocalName == "sec"
+                && string.Equals((string?)e.Attribute("sec-type"), "data-availability", StringComparison.Ordinal))
+            ?.Attribute("specific-use")?.Value.Trim();
+        return string.IsNullOrEmpty(specificUse) ? null : specificUse;
+    }
+
+    private static string? ReadCreditRolesValue(XDocument xml)
+    {
+        var count = xml.Descendants()
+            .Count(e =>
+                e.Name.LocalName == "role"
+                && ((string?)e.Attribute("content-type"))?.Contains(
+                    "credit.niso.org", StringComparison.OrdinalIgnoreCase) == true);
+        return count == 0 ? null : count.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string ToCamelCase(string value)
+        => value.Length == 0 ? value : char.ToLowerInvariant(value[0]) + value[1..];
 
     private static DiagnosticPhase2? BuildPhase2(FormattingContext ctx, IReport report)
     {

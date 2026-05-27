@@ -1,3 +1,4 @@
+using DocFormatter.Core.Jats;
 using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Rules;
@@ -145,5 +146,72 @@ public sealed class RuleRegistrationTests
         IServiceCollection? services = null;
 
         Assert.Throws<ArgumentNullException>(() => services!.AddPhase2Rules());
+    }
+
+    [Fact]
+    public void AddPhase3Injectors_RegistersFourInjectorsInRunOrder()
+    {
+        var services = new ServiceCollection();
+
+        services.AddPhase3Injectors();
+
+        using var provider = services.BuildServiceProvider();
+        var injectorTypes = provider.GetServices<IJatsInjector>().Select(r => r.GetType()).ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                typeof(OtherIdInjector),
+                typeof(EditedByInjector),
+                typeof(DataAvailabilityInjector),
+                typeof(CreditRolesInjector),
+            },
+            injectorTypes);
+    }
+
+    [Fact]
+    public void AddPhase3Injectors_RegistersEachInjectorAsTransient()
+    {
+        var services = new ServiceCollection();
+
+        services.AddPhase3Injectors();
+
+        var descriptors = services
+            .Where(d => d.ServiceType == typeof(IJatsInjector))
+            .ToArray();
+
+        Assert.Equal(4, descriptors.Length);
+        Assert.All(descriptors, d => Assert.Equal(ServiceLifetime.Transient, d.Lifetime));
+    }
+
+    [Fact]
+    public void AddPhase3Injectors_ResolvesIntoPhase3Pipeline()
+    {
+        var services = new ServiceCollection();
+        services.AddPhase3Injectors();
+        services.AddTransient<Phase3Pipeline>();
+
+        using var provider = services.BuildServiceProvider();
+
+        // The pipeline must construct from the registered IEnumerable<IJatsInjector>.
+        Assert.NotNull(provider.GetRequiredService<Phase3Pipeline>());
+    }
+
+    [Fact]
+    public void AddPhase3Injectors_ReturnsSameServiceCollectionForFluentChaining()
+    {
+        var services = new ServiceCollection();
+
+        var returned = services.AddPhase3Injectors();
+
+        Assert.Same(services, returned);
+    }
+
+    [Fact]
+    public void AddPhase3Injectors_NullServiceCollection_Throws()
+    {
+        IServiceCollection? services = null;
+
+        Assert.Throws<ArgumentNullException>(() => services!.AddPhase3Injectors());
     }
 }
