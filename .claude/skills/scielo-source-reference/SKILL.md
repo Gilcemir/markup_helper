@@ -1,6 +1,6 @@
 ---
 name: scielo-source-reference
-description: Referência de último recurso ao código-fonte original da SciELO (PC-Programs) — macros VBA brutas e DTDs SGML originais. Use SOMENTE quando `docs/scielo_context/` não contém a resposta para uma decisão sobre tag/regra SciELO, E você já leu o arquivo relevante de `docs/scielo_context/`. Os docs curados são autoritativos para casos normais — esta skill é fallback raro para detalhes ausentes na documentação curada. Não use para programação geral, code review, ou qualquer coisa fora de semântica SciELO legada.
+description: Referência de último recurso às fontes raw da SciELO — (1) código-fonte original PC-Programs (macros VBA + DTDs SGML 4.0, fase 2 bracket tags) e (2) SPS 1.10 (`_raw/SPS 1.10_pt.md`, JATS XML, fase 3). Use SOMENTE quando `docs/scielo_context/` não contém a resposta para uma decisão sobre tag/regra SciELO, E você já leu o arquivo curado relevante. Os docs curados são autoritativos para casos normais — esta skill é fallback raro para detalhes ausentes. Não use para programação geral, code review, ou qualquer coisa fora de semântica SciELO legada.
 ---
 
 # SciELO Source Reference (último recurso)
@@ -20,7 +20,17 @@ tag/regra SciELO.
 
 Se as 3 condições não se aplicam, **não use** esta skill.
 
-## Localização
+## Duas fontes raw
+
+| Fonte | Paradigma | Curado em | Fallback raw |
+|---|---|---|---|
+| **PC-Programs** (VBA + DTD SGML 4.0) | Fase 2 — bracket tags `[tag]` | `DTD_SCHEMA.md`, `TAG_INDEX.md`, `HIERARCHY.md`, `REENTRANCE.md` | `PC-Programs/` (abaixo) |
+| **SPS 1.10** (JATS XML) | Fase 3 — pós-Markup `<tag>` | `jats/*.md` | `docs/scielo_context/_raw/SPS 1.10_pt.md` |
+
+Para a fase 3, leia primeiro o arquivo `jats/` da tag; só caia no SPS
+raw (nas linhas citadas no topo de cada arquivo `jats/`) se faltar detalhe.
+
+## Localização (PC-Programs)
 
 ```
 /Users/educbank/Documents/personal_workspace/PC-Programs/

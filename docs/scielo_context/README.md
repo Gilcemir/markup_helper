@@ -48,11 +48,34 @@ melhor a entrada do estágio 2 e (fase 2) já preenche tags fáceis.
   `xref ref-type="corresp" rid="c1"`. **Refs ficam fora** (já existe
   automação externa).
 
+## Fase 3 — pós-processamento JATS XML (paradigma DISTINTO)
+
+⚠️ **Tudo acima descreve a fase 2: bracket tags `[tag]` no `.docx`.** A
+fase 3 é outro paradigma: o DocFormatter **pós-processa o XML JATS já
+gerado pelo Markup** (`<article>`, `<aff>`, `<contrib>`…), injetando 4
+coisas que o Markup não sabe fazer. Lê o material cru → extrai → gera/
+insere XML (mesma lógica de leitura das fases 1/2). **Não** emite colchetes.
+
+As 4 tags da fase 3 vivem em `jats/`, curadas do `_raw/SPS 1.10_pt.md`
+(SciELO Publishing Schema 1.10 — JATS, não DTD 4.0):
+
+| Arquivo | Tag | Fonte do valor |
+|---|---|---|
+| `jats/data_availability.md` | `<sec\|fn ...="data-availability">` | texto no documento; `@specific-use` por classificação |
+| `jats/article_id_other.md` | `<article-id pub-id-type="other">` | input externo `other.txt` (TSV nome-pdf→nº 5 dígitos) |
+| `jats/responsible_editor.md` | `<fn fn-type="edited-by">` | metadado editorial externo (TBD) |
+| `jats/credit_roles.md` | `<role>` (CRediT) | contribuições no documento + tabela termo→URL |
+
+Cada arquivo distingue **o que é determinístico vs julgamento** e traz a
+regra de placement no XML. Pacote/exemplos de input: `examples/phase-3/`.
+Raw completo é fallback (linhas citadas em cada arquivo).
+
 ## Roteamento por tarefa — qual arquivo ler
 
 | Sua tarefa de codificação | Leia primeiro | Depois | Pode ignorar |
 |---|---|---|---|
 | Implementar detecção/emissão de uma das tags da fase 2 | `DTD_SCHEMA.md` | `TAG_INDEX.md` (heurísticas que o Markup já usa), `REENTRANCE.md` (o que evitar) | resto |
+| Implementar uma das 4 tags da **fase 3** (JATS XML pós-Markup) | `jats/` (arquivo da tag) | `_raw/SPS 1.10_pt.md` nas linhas citadas, se faltar detalhe | docs de bracket (fase 2) |
 | Decidir se uma tag pode ser inserida em determinado contexto (validação hierárquica) | `HIERARCHY.md` | `DTD_SCHEMA.md` para confirmar com o DTD oficial | resto |
 | Entender o que pode quebrar quando o operador SciELO abre o `.docx` pré-marcado | `REENTRANCE.md` | `TAG_INDEX.md` (lista de auto-marks que não checam existência) | resto |
 | Decidir formato de atributo / valores aceitos | `DTD_SCHEMA.md` (seção "Atributos com valores controlados") | `_raw/_reverse_index.txt` se precisar do mapa cru | resto |

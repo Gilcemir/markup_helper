@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jats-agent-instructions version="1.0">
+  <!-- 
+    INSTRUÇÕES PARA O GEMINI:
+    
+    1. Leia este arquivo de instruções
+    2. Leia o arquivo articles-id.txt (mapeamento de article IDs)
+    3. Leia o arquivo data.txt (mapeamento de data availability)
+    4. Leia os arquivos XML JATS da pasta fornecida
+    5. Aplique as transformações descritas abaixo
+    6. Retorne os arquivos XML modificados
+    -->
+  <agent-config>
+    <name>JATS XML Transformer</name>
+    <description>Agent para adicionar elementos em arquivos XML JATS</description>
+    <version>1.0</version>
+  </agent-config>
+  <!-- ============================================ -->
+  <!-- AÇÃO 1: Adicionar Article ID                 -->
+  <!-- ============================================ -->
+  <action id="add-article-id" enabled="true">
+    <description>Adicionar um novo article-id após o DOI existente</description>
+    <instructions>
+      <step order="1">Localize o elemento article-id com atributo pub-id-type="doi"</step>
+      <step order="2"
+        >Adicione um NOVO elemento article-id IMEDIATAMENTE APÓS o DOI com atributo pub-id-type="other"</step
+      >
+      <step order="3">Use o mesmo namespace do elemento DOI existente</step>
+      <step order="4">Mantenha a indentação consistente (2 espaços)</step>
+    </instructions>
+    <template>
+      <![CDATA[
+            <article-id pub-id-type="other">{id_value}</article-id>
+            ]]>
+    </template>
+    <note>O atributo pub-id-type é SEMPRE "other" (fixo)</note>
+    <example-before>
+      <![CDATA[
+            <article-id pub-id-type="doi">10.1234/example</article-id>
+            ]]>
+    </example-before>
+    <example-after>
+      <![CDATA[
+            <article-id pub-id-type="doi">10.1234/example</article-id>
+            <article-id pub-id-type="other">00200</article-id>
+            ]]>
+    </example-after>
+    <validation>
+      <rule>O novo article-id DEVE estar imediatamente após o DOI</rule>
+      <rule>O namespace DEVE ser preservado</rule>
+      <rule>A estrutura XML DEVE permanecer válida</rule>
+    </validation>
+  </action>
+  <!-- ============================================ -->
+  <!-- AÇÃO 2: Adicionar Data Availability          -->
+  <!-- ============================================ -->
+  <action id="add-data-availability" enabled="true">
+    <description>Adicionar declaração de disponibilidade de dados</description>
+    <instructions>
+      <step order="1">SEMPRE usar declaration_type = "section" (padrão fixo)</step>
+      <step order="2">Deduzir specific-use baseado no conteúdo (ver regras de inferência)</step>
+      <step order="3">SEMPRE usar label = "Data Availability" (fixo)</step>
+      <step order="4">SEMPRE usar location = "back" (fixo)</step>
+      <step order="5">Adicionar em back após elemento ack (se existir) ou como primeiro filho</step>
+      <step order="6">IGNORAR se o conteúdo for vazio, "-", ou apenas espaços.</step>
+    </instructions>
+    <template type="section">
+      <![CDATA[
+            <sec sec-type="data-availability" specific-use="{specific_use}">
+                <title>Data Availability</title>
+                <p>{content}</p>
+            </sec>
+            ]]>
+    </template>
+    <output-example>
+      <description>Formato EXATO esperado no XML final</description><![CDATA[
+<sec sec-type="data-availability" specific-use="data-available-upon-request">
+    <title>Data Availability</title>
+    <p>The datasets generated and/or analyzed during this research are available from the corresponding author upon request.</p>
+</sec>
+            ]]>
+    </output-example>
+    <fixed-values>
+      <param name="declaration_type">section</param>
+      <param name="label">Data Availability</param>
+      <param name="location">back</param>
+    </fixed-values>
+    <example-section>
+      <![CDATA[
+            <back>
+                <ack>
+                    <title>Acknowledgments</title>
+                    <p>Thanks...</p>
+                </ack>
+                <!-- ADICIONAR AQUI (após ack) -->
+                <sec sec-type="data-availability" specific-use="data-available-upon-request">
+                    <title>Data Availability</title>
+                    <p>The datasets generated...</p>
+                </sec>
+            </back>
+            ]]>
+    </example-section>
+    <validation>
+      <rule>SEMPRE adicionar em back após ack ou como primeiro filho de back</rule>
+      <rule>NÃO adicionar se conteúdo for vazio, "-", ou apenas espaços</rule>
+      <rule>O namespace DEVE ser preservado</rule>
+      <rule>A estrutura XML DEVE permanecer válida</rule>
+    </validation>
+  </action>
+  <!-- ============================================ -->
+  <!-- VALORES ESPECÍFICOS (para specific-use)      -->
+  <!-- ============================================ -->
+  <specific-use-values>
+    <value code="data-available-upon-request">Data available upon request</value>
+    <value code="data-available-in-repository">Data available in public repository</value>
+    <value code="data-available-as-supplement">Data available as supplement</value>
+    <value code="data-not-available">Data not available</value>
+    <value code="no-new-data">No new data generated</value>
+  </specific-use-values>
+  <!-- ============================================ -->
+  <!-- LÓGICA DE DEDUÇÃO DO SPECIFIC-USE            -->
+  <!-- ============================================ -->
+  <specific-use-inference>
+    <description>Como deduzir o valor de specific-use baseado no conteúdo do data availability</description>
+    <rule priority="1">
+      <pattern>upon reasonable request|upon request|available.*request</pattern>
+      <specific-use>data-available-upon-request</specific-use>
+    </rule>
+    <rule priority="2">
+      <pattern>repository|database|archive|accession|GenBank|Dryad|Figshare</pattern>
+      <specific-use>data-available-in-repository</specific-use>
+    </rule>
+    <rule priority="3">
+      <pattern>supplement|supplementary|additional file|supporting information</pattern>
+      <specific-use>data-available-as-supplement</specific-use>
+    </rule>
+    <rule priority="4">
+      <pattern>not available|cannot be shared|restricted|confidential</pattern>
+      <specific-use>data-not-available</specific-use>
+    </rule>
+    <rule priority="5">
+      <pattern>no new data|no data generated|only existing|previously published</pattern>
+      <specific-use>no-new-data</specific-use>
+    </rule>
+    <default>
+      <specific-use>data-available-upon-request</specific-use>
+      <note>Se nenhum padrão acima for encontrado, usar este como padrão</note>
+    </default>
+  </specific-use-inference>
+  <!-- ============================================ -->
+  <!-- REGRAS GLOBAIS                                -->
+  <!-- ============================================ -->
+  <global-rules>
+    <rule priority="critical">SEMPRE preserve a estrutura XML válida</rule>
+    <rule priority="critical">SEMPRE preserve todos os namespaces existentes</rule>
+    <rule priority="high">Mantenha indentação consistente (2 espaços)</rule>
+    <rule priority="high">Não remova ou altere elementos existentes além do solicitado</rule>
+    <rule priority="medium">Adicione uma linha em branco antes de novos elementos principais</rule>
+    <rule priority="low">Mantenha comentários XML existentes</rule>
+  </global-rules>
+  <!-- ============================================ -->
+  <!-- FORMATO DOS ARQUIVOS DE ENTRADA              -->
+  <!-- ============================================ -->
+  <input-files-format>
+    <!-- Arquivo 1: articles-id.txt -->
+    <file name="articles-id.txt">
+      <description>Arquivo TSV (Tab-Separated Values) mapeando nomes de arquivo para valores de article-id</description>
+      <format>
+        <separator>TAB (não espaço ou vírgula)</separator>
+        <header>Primeira linha (ignorar): Article[TAB]"other"</header>
+        <data-row>nome_arquivo_sem_extensao[TAB]valor_article_id</data-row>
+      </format>
+      <example>
+        <![CDATA[
+Article	"other"
+1984-7033-cbab-25-03-e49752531	00200
+1984-7033-cbab-25-03-e51262532	00201
+1984-7033-cbab-25-03-e51402533	00202
+                ]]>
+      </example>
+      <matching-logic>
+        <description>Como fazer o match entre o arquivo articles-id.txt e os XMLs</description>
+        <step order="1">Primeira coluna = nome do arquivo XML SEM a extensão .xml</step>
+        <step order="2">Segunda coluna = valor que será inserido no article-id</step>
+        <step order="3">Para encontrar o XML: adicionar ".xml" ao final da primeira coluna</step>
+        <example>
+                    Linha: "1984-7033-cbab-25-03-e49752531[TAB]00200"
+                    Arquivo correspondente: 1984-7033-cbab-25-03-e49752531.xml
+                    Valor a inserir: 00200
+                    Resultado: &lt;article-id pub-id-type="other"&gt;00200&lt;/article-id&gt;
+                </example>
+      </matching-logic>
+      <rules>
+        <rule>Ignorar primeira linha (cabeçalho)</rule>
+        <rule>Separador DEVE ser TAB</rule>
+        <rule>Match é feito pelo nome completo do arquivo (sem extensão)</rule>
+      </rules>
+    </file>
+    <!-- Arquivo 2: data.txt -->
+    <file name="data.txt">
+      <description>Arquivo TSV (Tab-Separated Values) mapeando IDs de 4 dígitos para conteúdo de data availability</description>
+      <format>
+        <separator>TAB (não espaço ou vírgula)</separator>
+        <header>Primeira linha (ignorar): ID[TAB]data avalibility</header>
+        <data-row>id_4_digitos[TAB]conteudo_data_availability</data-row>
+      </format>
+      <example>
+        <![CDATA[
+ID	data avalibility
+4975	The datasets generated and/or analyzed during the current research are available from the corresponding author upon reasonable request.
+5126	The datasets generated and/or analyzed during the current research are available from the corresponding author upon reasonable request.
+5115	-
+                ]]>
+      </example>
+      <matching-logic>
+        <description>Como fazer o match entre o arquivo data.txt e os XMLs</description>
+        <step order="1">Extrair os 4 PRIMEIROS dígitos após "e" no nome do arquivo XML</step>
+        <step order="2">Usar regex: .*-e(\d{4}).* onde o grupo capturado são os 4 dígitos</step>
+        <step order="3">Buscar esse ID (4 dígitos) na primeira coluna do data.txt</step>
+        <step order="4"
+          >Se encontrar E o conteúdo for válido (não vazio, não "-"), usar esse conteúdo</step
+        >
+        <step order="5">Se conteúdo for "-" ou vazio, NÃO adicionar data-availability</step>
+        <example>
+                    Nome do arquivo: 1984-7033-cbab-25-03-e49752531.xml
+                    Regex .*-e(\d{4}).* extrai: 4975 (primeiros 4 dígitos após "e")
+                    Busca em data.txt: linha com ID = 4975
+                    Conteúdo encontrado: "The datasets generated and/or analyzed..."
+                    Resultado: adicionar &lt;sec sec-type="data-availability"&gt;...&lt;/sec&gt;
+                </example>
+        <example-skip>
+                    Nome do arquivo: 1984-7033-cbab-25-03-e51152538.xml
+                    Regex extrai: 5115
+                    Busca em data.txt: linha com ID = 5115
+                    Conteúdo encontrado: "-"
+                    Resultado: NÃO adicionar data-availability (ignorar)
+                </example-skip>
+      </matching-logic>
+      <rules>
+        <rule>Ignorar primeira linha (cabeçalho)</rule>
+        <rule>Separador DEVE ser TAB</rule>
+        <rule>Primeira coluna: 4 primeiros dígitos após "e" no nome do arquivo</rule>
+        <rule>IGNORAR e NÃO adicionar data-availability se conteúdo for "-" ou vazio</rule>
+        <rule>Match é feito por regex no nome do arquivo: .*-e(\d{4}).*</rule>
+      </rules>
+    </file>
+  </input-files-format>
+  <!-- ============================================ -->
+  <!-- WORKFLOW DE EXECUÇÃO                          -->
+  <!-- ============================================ -->
+  <execution-workflow>
+    <step order="1">
+      <name>Validar Entrada</name>
+      <description>Verificar se todos os arquivos necessários foram fornecidos</description>
+      <required-files>
+        <file required="true">jats-instructions.xml (este arquivo)</file>
+        <file required="true">articles-id.txt</file>
+        <file required="true">data.txt</file>
+        <directory required="true"
+          >Pasta contendo TODOS os arquivos XML a serem modificados</directory
+        >
+      </required-files>
+    </step>
+    <step order="2">
+      <name>Identificar XMLs</name>
+      <description>Localizar todos arquivos .xml no diretório fornecido</description>
+    </step>
+    <step order="3">
+      <name>Ler e Parsear Arquivos de Mapeamento</name>
+      <description>Extrair valores dos arquivos articles-id.txt e data.txt</description>
+      <substeps>
+        <substep>Ler articles-id.txt: ignorar primeira linha, separar por TAB</substep>
+        <substep>Ler data.txt: ignorar primeira linha, separar por TAB</substep>
+        <substep>Criar mapeamento interno para busca rápida</substep>
+      </substeps>
+    </step>
+    <step order="4">
+      <name>Processar Cada XML</name>
+      <description>Para cada arquivo XML encontrado, aplicar as transformações</description>
+      <substeps>
+        <substep order="1">Extrair nome do arquivo (sem extensão)</substep>
+        <substep order="2">Buscar correspondência em articles-id.txt pelo nome completo</substep>
+        <substep order="3">Extrair 4 dígitos após "e" usando regex .*-e(\d{4}).*</substep>
+        <substep order="4">Buscar correspondência em data.txt pelo ID de 4 dígitos</substep>
+        <substep order="5">Aplicar ação add-article-id se encontrou correspondência</substep>
+        <substep order="6"
+          >Aplicar ação add-data-availability se encontrou correspondência válida (não "-" nem vazio)</substep
+        >
+        <substep order="7">Deduzir specific-use do conteúdo usando regras de inferência</substep>
+      </substeps>
+    </step>
+    <step order="5">
+      <name>Validar Resultado</name>
+      <description>Verificar se o XML resultante é válido</description>
+      <checks>
+        <check>XML bem formado</check>
+        <check>Namespaces preservados</check>
+        <check>Indentação consistente</check>
+        <check>Elementos adicionados nos locais corretos</check>
+      </checks>
+    </step>
+    <step order="6">
+      <name>Retornar Arquivos</name>
+      <description>Retornar os arquivos XML modificados</description>
+    </step>
+  </execution-workflow>
+</jats-agent-instructions>
