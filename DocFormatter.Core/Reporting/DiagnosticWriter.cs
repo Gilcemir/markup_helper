@@ -276,8 +276,10 @@ public static class DiagnosticWriter
         var count = xml.Descendants()
             .Count(e =>
                 e.Name.LocalName == "role"
-                && ((string?)e.Attribute("content-type"))?.Contains(
-                    "credit.niso.org", StringComparison.OrdinalIgnoreCase) == true);
+                && (
+                    ((string?)e.Attribute("content-type"))?.Contains(
+                        "credit.niso.org", StringComparison.OrdinalIgnoreCase) == true
+                    || (e.Attribute("content-type") is null && !string.IsNullOrWhiteSpace(e.Value))));
         return count == 0 ? null : count.ToString(CultureInfo.InvariantCulture);
     }
 

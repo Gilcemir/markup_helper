@@ -388,7 +388,8 @@ internal static class CliApp
 
         foreach (var arg in args)
         {
-            if (arg.StartsWith(NonInteractiveFlag, StringComparison.Ordinal))
+            if (string.Equals(arg, NonInteractiveFlag, StringComparison.Ordinal)
+                || arg.StartsWith($"{NonInteractiveFlag}=", StringComparison.Ordinal))
             {
                 var eq = arg.IndexOf('=');
                 if (eq < 0 || eq == arg.Length - 1)
