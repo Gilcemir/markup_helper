@@ -170,7 +170,15 @@ internal sealed class Phase3Processor
         }
 
         ReportWriter.Write(reportPath, report);
-        DiagnosticWriter.WritePhase3(diagnosticPath, sourceFileName, jdoc.Document, report, recording.Dispositions);
+
+        // Only emit the diagnostic on success: on failure no XML is saved, but the
+        // in-memory tree was partially mutated by injectors that ran before the
+        // abort, so a diagnostic built from it would claim tags that never reached
+        // disk. The error lives in the .report.txt instead.
+        if (failReason is null)
+        {
+            DiagnosticWriter.WritePhase3(diagnosticPath, sourceFileName, jdoc.Document, report, recording.Dispositions);
+        }
 
         if (failReason is not null)
         {

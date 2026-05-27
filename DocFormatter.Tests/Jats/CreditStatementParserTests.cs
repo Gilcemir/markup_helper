@@ -57,4 +57,14 @@ public sealed class CreditStatementParserTests
             + "Writing - original draft: Silva, F. A.";
         Assert.Equal(CreditShape.Prose, CreditStatementParser.Parse(raw).Shape);
     }
+
+    [Fact]
+    public void Parse_AuthorKeyed_WithMalformedSegment_FallsBackToProse()
+    {
+        // A non-empty segment that is not "keys: terms" makes the statement
+        // ambiguous: fall back to Prose (prompt) instead of silently auto-applying
+        // only the well-formed segments (P3 / ADR-005).
+        var raw = "ATAJ: Conceptualization, Methodology. see acknowledgements. DRSJ: Software";
+        Assert.Equal(CreditShape.Prose, CreditStatementParser.Parse(raw).Shape);
+    }
 }

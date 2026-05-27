@@ -135,17 +135,22 @@ public static class CreditStatementParser
         foreach (var rawEntry in text.Split('.'))
         {
             var entry = rawEntry.Trim();
+            if (entry.Length == 0)
+            {
+                continue; // trailing separator artifact (e.g. the closing '.')
+            }
+
             var colon = entry.IndexOf(':', StringComparison.Ordinal);
             if (colon < 0)
             {
-                continue; // a segment with no key:terms split is ignored
+                return false; // a non-empty segment that is not "keys: terms" → not cleanly author-keyed
             }
 
             var keys = SplitTrim(entry[..colon], ';');
             var terms = SplitTrim(entry[(colon + 1)..], ',');
             if (keys.Count == 0 || terms.Count == 0)
             {
-                continue;
+                return false; // malformed author-keyed segment → fall back to prose and prompt
             }
 
             anyMappedTerm |= terms.Any(t => CreditTermTable.TryMap(t, out _));

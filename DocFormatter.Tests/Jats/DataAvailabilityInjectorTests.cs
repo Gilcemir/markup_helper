@@ -157,6 +157,26 @@ public sealed class DataAvailabilityInjectorTests
     }
 
     [Fact]
+    public void Apply_ConfirmerOverridesWithInvalidValue_DoesNotInject_AndReportsWarn()
+    {
+        // An override outside the five SPS specific-use values must not be written
+        // (it would be schema-invalid); the tag is skipped and reported (P4).
+        var xml = ArticleWithBack(AckThenRefs);
+        var before = xml.ToString(SaveOptions.DisableFormatting);
+        var confirmer = new StubConfirmer(new ConfirmResult("totally-invalid", ConfirmDisposition.Overridden));
+        var report = new Report();
+
+        new DataAvailabilityInjector().Apply(
+            CreateContext(xml, "Os procedimentos seguiram as diretrizes institucionais.", confirmer),
+            report);
+
+        Assert.Equal(before, xml.ToString(SaveOptions.DisableFormatting));
+        Assert.Empty(DataAvailabilitySecs(xml));
+        var entry = Assert.Single(report.Entries);
+        Assert.Equal(ReportLevel.Warn, entry.Level);
+    }
+
+    [Fact]
     public void Apply_PlacesSectionImmediatelyAfterAck_WithTitleAndStatementParagraph()
     {
         var xml = ArticleWithBack(AckThenRefs);

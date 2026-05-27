@@ -123,7 +123,7 @@ public sealed class CliPhase3Tests : IDisposable
         var pkg = Path.Combine(_tempDir, "scielo_package");
         Directory.CreateDirectory(pkg);
 
-        var ok = CliApp.TryResolvePhase3Layout(pkg, out _, out _, out var error);
+        var ok = CliApp.TryResolvePhase3Layout(pkg, out _, out _, out _, out var error);
 
         Assert.False(ok);
         Assert.NotNull(error);
@@ -140,11 +140,12 @@ public sealed class CliPhase3Tests : IDisposable
         Directory.CreateDirectory(markup);
         File.WriteAllText(Path.Combine(root, "other.txt"), "x.pdf\t00001");
 
-        var ok = CliApp.TryResolvePhase3Layout(pkg, out var markupDir, out var table, out var error);
+        var ok = CliApp.TryResolvePhase3Layout(pkg, out var markupDir, out var table, out var otherTablePath, out var error);
 
         Assert.True(ok);
         Assert.Null(error);
         Assert.Equal(Path.GetFullPath(markup), Path.GetFullPath(markupDir));
+        Assert.Equal(Path.GetFullPath(Path.Combine(root, "other.txt")), Path.GetFullPath(otherTablePath));
         Assert.True(table.TryGetOther("x", out var other));
         Assert.Equal("00001", other);
     }
@@ -231,7 +232,9 @@ public sealed class CliPhase3Tests : IDisposable
         var stderr = new StringWriter();
         var exit = CliApp.Run(new[] { "phase3", xmlPath, "--non-interactive=accept" }, new StringWriter(), stderr);
 
-        Assert.Equal(CliApp.ExitCriticalAbort, exit);
+        // A pairing failure is a recoverable per-document skip (ADR-004), not a
+        // critical abort — its own non-zero code, distinct from a crash.
+        Assert.Equal(CliApp.ExitPairingSkipped, exit);
         var reportPath = Path.Combine(pkg, "formatted-phase3", "orphan.report.txt");
         Assert.True(File.Exists(reportPath));
     }

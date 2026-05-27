@@ -114,17 +114,52 @@ public sealed class ConfirmerTests
     }
 
     [Fact]
-    public void Console_EndOfStreamInput_ReturnsConfirmed()
+    public void Console_EndOfStreamInput_Throws()
     {
-        // Empty stream → ReadLine returns null; treat as accept rather than crash.
+        // Empty/closed stream → ReadLine returns null: there is no operator to
+        // answer. Silently accepting would defeat the fail-loud intent (ADR-001),
+        // so the interactive confirmer aborts and points to --non-interactive.
         using var input = new StringReader(string.Empty);
+        using var output = new StringWriter();
+        var confirmer = new ConsoleConfirmer(input, output);
+
+        var ex = Assert.Throws<ConfirmationInputUnavailableException>(
+            () => confirmer.Confirm(SampleProposal()));
+        Assert.Contains("--non-interactive", ex.Message);
+    }
+
+    [Fact]
+    public void Console_SkipToken_ReturnsSkipped_WithNoValue()
+    {
+        using var input = new StringReader($"{ConsoleConfirmer.SkipToken}\n");
         using var output = new StringWriter();
         var confirmer = new ConsoleConfirmer(input, output);
 
         var result = confirmer.Confirm(SampleProposal());
 
-        Assert.Equal("open-data", result.Value);
+        Assert.Equal(ConfirmDisposition.Skipped, result.Disposition);
+        Assert.Equal(string.Empty, result.Value);
+    }
+
+    [Fact]
+    public void Console_NoOverrideProposal_TypedValue_RepromptsInsteadOfOverriding()
+    {
+        // credit-roles sets AllowsOverride=false: a typed value cannot re-map it, so
+        // it must re-prompt rather than record a no-op "Overridden" (P11).
+        var proposal = new Proposal("credit-roles", "apply CRediT to: Costa AES", "unresolved author(s): Neto VBP")
+        {
+            AllowsFreeText = true,
+            AllowsOverride = false,
+        };
+        // First line is a stray value (invalid here → re-prompt); second is Enter.
+        using var input = new StringReader("Conceptualization\n\n");
+        using var output = new StringWriter();
+        var confirmer = new ConsoleConfirmer(input, output);
+
+        var result = confirmer.Confirm(proposal);
+
         Assert.Equal(ConfirmDisposition.Confirmed, result.Disposition);
+        Assert.Contains("invalid option", output.ToString());
     }
 
     // ── ADR-007: operator-chosen, document-scoped free-text outcome ───────────

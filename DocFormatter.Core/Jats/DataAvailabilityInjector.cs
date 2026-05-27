@@ -37,6 +37,20 @@ public sealed class DataAvailabilityInjector : IJatsInjector
     private const string DataAvailabilityType = "data-availability";
 
     /// <summary>
+    /// The five SPS 1.10 <c>@specific-use</c> values. An operator override is
+    /// validated against this set so a typo cannot write a schema-invalid attribute
+    /// (the auto-applied path already produces one of these by construction).
+    /// </summary>
+    private static readonly HashSet<string> AllowedSpecificUse = new(StringComparer.Ordinal)
+    {
+        DataAvailabilityClassifier.DataAvailable,
+        DataAvailabilityClassifier.DataAvailableUponRequest,
+        DataAvailabilityClassifier.DataInArticle,
+        DataAvailabilityClassifier.DataNotAvailable,
+        DataAvailabilityClassifier.Uninformed,
+    };
+
+    /// <summary>
     /// The mandatory section title. The corpus is English (<c>language="en"</c>),
     /// so the standard SPS English label is used; the value mirrors the
     /// <c>&lt;label&gt;</c> shown for the <c>&lt;fn&gt;</c> form in
@@ -131,7 +145,17 @@ public sealed class DataAvailabilityInjector : IJatsInjector
             return false;
         }
 
-        specificUse = result.Value;
+        var candidate = result.Value.Trim();
+        if (!AllowedSpecificUse.Contains(candidate))
+        {
+            // An override outside the five SPS values would produce schema-invalid
+            // XML; reject it rather than write it (the tag is reported as skipped).
+            reason = $"invalid confirmed specific-use '{result.Value}'";
+            specificUse = string.Empty;
+            return false;
+        }
+
+        specificUse = candidate;
         return true;
     }
 

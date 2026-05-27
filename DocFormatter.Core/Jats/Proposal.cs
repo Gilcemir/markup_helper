@@ -17,6 +17,17 @@ public sealed record Proposal(string Tag, string ProposedValue, string Reason)
     /// when this is <see langword="true"/>, and it is never auto-selected.
     /// </summary>
     public bool AllowsFreeText { get; init; }
+
+    /// <summary>
+    /// Whether the operator may replace the proposed value with their own
+    /// (<see cref="ConfirmDisposition.Overridden"/>). The default is
+    /// <see langword="true"/>. The credit-roles prompt sets it to
+    /// <see langword="false"/> (ADR-005/ADR-007): there is no single string the
+    /// operator could type that meaningfully re-maps CRediT, so a free-form
+    /// override would be a no-op recorded misleadingly as "Overridden" — only
+    /// accept / decline / free-text are meaningful there.
+    /// </summary>
+    public bool AllowsOverride { get; init; } = true;
 }
 
 /// <summary>

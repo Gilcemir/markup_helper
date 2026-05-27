@@ -17,6 +17,12 @@ internal static class CliApp
     internal const int ExitCriticalAbort = 2;
     internal const int ExitVerifyMismatch = 3;
 
+    // A phase3 pairing skip in single-file mode: the document could not be paired
+    // (no matching docx, missing other.txt entry, DOI mismatch). It is a recoverable
+    // per-document skip (ADR-004), distinct from a crash (ExitCriticalAbort) and from
+    // success — batch mode likewise does not fail the run for a skip.
+    internal const int ExitPairingSkipped = 4;
+
     internal const string LogFileName = "_app.log";
     internal const string BatchSummaryFileName = "_batch_summary.txt";
 
@@ -484,7 +490,7 @@ internal static class CliApp
         var packageDir = Path.GetDirectoryName(Path.GetFullPath(xmlPath))
             ?? Directory.GetCurrentDirectory();
 
-        if (!TryResolvePhase3Layout(packageDir, out var markupDir, out var otherTable, out var layoutError))
+        if (!TryResolvePhase3Layout(packageDir, out var markupDir, out var otherTable, out var otherTablePath, out var layoutError))
         {
             stderr.WriteLine($"error: {layoutError}");
             return ExitUsageError;
@@ -494,6 +500,7 @@ internal static class CliApp
         Directory.CreateDirectory(outDir);
 
         using var logger = BuildLogger(Path.Combine(outDir, LogFileName));
+        logger.Information("phase3 inputs: other.txt={OtherTablePath}, markup={MarkupDir}", otherTablePath, markupDir);
         using var services = BuildPhase3ServiceProvider();
         var processor = new Phase3Processor(
             services, logger, markupDir, otherTable, confirmer, Phase3OutputSubdir);
@@ -520,7 +527,7 @@ internal static class CliApp
                 return ExitSuccess;
             case Phase3OutcomeKind.Skipped:
                 stderr.WriteLine($"⤼ {outcome.FileName} skipped: {outcome.Reason}");
-                return ExitCriticalAbort;
+                return ExitPairingSkipped;
             default:
                 stderr.WriteLine($"✗ {outcome.FileName}: {outcome.Reason}");
                 return ExitCriticalAbort;
@@ -535,7 +542,7 @@ internal static class CliApp
     {
         var packageDir = Path.GetFullPath(folderPath);
 
-        if (!TryResolvePhase3Layout(packageDir, out var markupDir, out var otherTable, out var layoutError))
+        if (!TryResolvePhase3Layout(packageDir, out var markupDir, out var otherTable, out var otherTablePath, out var layoutError))
         {
             stderr.WriteLine($"error: {layoutError}");
             return ExitUsageError;
@@ -545,6 +552,7 @@ internal static class CliApp
         Directory.CreateDirectory(outDir);
 
         using var logger = BuildLogger(Path.Combine(outDir, LogFileName));
+        logger.Information("phase3 inputs: other.txt={OtherTablePath}, markup={MarkupDir}", otherTablePath, markupDir);
         using var services = BuildPhase3ServiceProvider();
         var processor = new Phase3Processor(
             services, logger, markupDir, otherTable, confirmer, Phase3OutputSubdir);
@@ -601,6 +609,7 @@ internal static class CliApp
         string packageDir,
         out string markupSourceDir,
         out OtherTable otherTable,
+        out string otherTablePath,
         out string? error)
     {
         var dir = new DirectoryInfo(Path.GetFullPath(packageDir));
@@ -620,18 +629,21 @@ internal static class CliApp
             {
                 markupSourceDir = string.Empty;
                 otherTable = null!;
+                otherTablePath = string.Empty;
                 error = $"failed to load {otherPath}: {ex.Message}";
                 return false;
             }
 
             var markup = Path.Combine(dir.FullName, MarkupSourceDirName);
             markupSourceDir = Directory.Exists(markup) ? markup : dir.FullName;
+            otherTablePath = otherPath;
             error = null;
             return true;
         }
 
         markupSourceDir = string.Empty;
         otherTable = null!;
+        otherTablePath = string.Empty;
         error = $"could not locate '{OtherTableFileName}' searching up from '{packageDir}'";
         return false;
     }

@@ -9,6 +9,7 @@ public sealed class CreditRolesInjectorTests
 {
     private const string ConceptualizationUrl = "http://credit.niso.org/contributor-roles/conceptualization/";
     private const string MethodologyUrl = "http://credit.niso.org/contributor-roles/methodology/";
+    private const string WritingOriginalDraftUrl = "http://credit.niso.org/contributor-roles/writing-original-draft/";
 
     private sealed class ThrowingConfirmer : IConfirmer
     {
@@ -95,6 +96,33 @@ public sealed class CreditRolesInjectorTests
         Assert.Equal(ConceptualizationUrl, (string?)lopes.Attribute("content-type"));
         Assert.Equal(ConceptualizationUrl, (string?)nascimento.Attribute("content-type"));
         Assert.Equal("Conceptualization", lopes.Value);
+    }
+
+    [Fact]
+    public void Apply_RoleKeyed_DuplicateRoleSpellingForOneAuthor_AutoAppliesOnce()
+    {
+        // The same CRediT role written twice with different dash spellings
+        // (hyphen vs en-dash) for each author. Both spellings normalize to one URL,
+        // so the role is emitted once — but the author must still auto-apply without
+        // prompting. Regression: isClean used roles.Count == Terms.Count, so the
+        // collapsed duplicate (1 role vs 2 terms) made the author "unclean" and the
+        // auto-apply branch silently dropped it (no role, no report).
+        var xml = ArticleWithContribs(
+            Contrib("Lopes", "Danilo Alves Porto da Silva"),
+            Contrib("Nascimento", "Ildon Rodrigues do"));
+
+        new CreditRolesInjector().Apply(
+            CreateContext(
+                xml,
+                "Writing - original draft: Lopes DAPS, Nascimento IRN; "
+                    + "Writing – original draft: Lopes DAPS, Nascimento IRN",
+                new ThrowingConfirmer()),
+            new Report());
+
+        var lopes = Assert.Single(RolesOf(xml, "Lopes"));
+        var nascimento = Assert.Single(RolesOf(xml, "Nascimento"));
+        Assert.Equal(WritingOriginalDraftUrl, (string?)lopes.Attribute("content-type"));
+        Assert.Equal(WritingOriginalDraftUrl, (string?)nascimento.Attribute("content-type"));
     }
 
     [Fact]

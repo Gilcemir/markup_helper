@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace DocFormatter.Core.Jats;
 
 /// <summary>
@@ -100,7 +102,10 @@ public static class DataAvailabilityClassifier
                 "Statement is empty; cannot classify.");
         }
 
-        var text = statement.ToLowerInvariant();
+        // Normalize to NFC first so accented pt-BR keywords ("repositório",
+        // "não estão disponíveis") match regardless of whether the docx text arrived
+        // composed (NFC) or decomposed (NFD); the source keyword literals are NFC.
+        var text = statement.Normalize(NormalizationForm.FormC).ToLowerInvariant();
         var hits = Corpus
             .Select(entry => (entry.Value, Count: entry.Keywords.Count(k => text.Contains(k, StringComparison.Ordinal))))
             .Where(s => s.Count > 0)

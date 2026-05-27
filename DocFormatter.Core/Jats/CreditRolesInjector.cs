@@ -66,7 +66,10 @@ public sealed class CreditRolesInjector : IJatsInjector
             var result = ctx.Confirm.Confirm(new Proposal(
                 Name,
                 "(free prose)",
-                "CREDIT statement is free prose; CRediT roles cannot be auto-mapped."));
+                "CREDIT statement is free prose; CRediT roles cannot be auto-mapped.")
+            {
+                AllowsOverride = false,
+            });
             report.Warn(Name, $"CREDIT statement is free prose; roles not auto-applied ({result.Disposition}).");
             return;
         }
@@ -89,7 +92,7 @@ public sealed class CreditRolesInjector : IJatsInjector
         // only branch that offers it.
         var reason = BuildReason(unknownTerms, unresolvedAuthors);
         var confirm = ctx.Confirm.Confirm(
-            new Proposal(Name, SummarizeClean(plan), reason) { AllowsFreeText = true });
+            new Proposal(Name, SummarizeClean(plan), reason) { AllowsFreeText = true, AllowsOverride = false });
         if (confirm.Disposition == ConfirmDisposition.Skipped)
         {
             report.Warn(Name, $"CRediT roles not applied ({reason}).");
@@ -131,6 +134,7 @@ public sealed class CreditRolesInjector : IJatsInjector
             }
 
             var roles = new List<CreditRole>();
+            var allTermsMapped = true;
             foreach (var term in entry.Terms)
             {
                 if (CreditTermTable.TryMap(term, out var role))
@@ -143,11 +147,15 @@ public sealed class CreditRolesInjector : IJatsInjector
                 else
                 {
                     unknownTerms.Add(term);
+                    allTermsMapped = false;
                 }
             }
 
-            var isClean = resolution.Status == ResolveStatus.Resolved
-                && roles.Count == entry.Terms.Count;
+            // "Clean" means the author resolved AND every written term mapped — not
+            // roles.Count == Terms.Count, which wrongly flags a duplicate-spelling
+            // term (e.g. hyphen vs en-dash) as unclean because the two terms collapse
+            // to one URL, silently dropping an otherwise auto-applicable author.
+            var isClean = resolution.Status == ResolveStatus.Resolved && allTermsMapped;
             plan.Add(new PlanItem(entry.AuthorKey, resolution.Contrib, roles, entry.Terms, isClean));
         }
 

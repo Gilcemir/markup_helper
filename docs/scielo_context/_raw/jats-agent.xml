@@ -110,6 +110,19 @@
   <!-- ============================================ -->
   <!-- VALORES ESPECÍFICOS (para specific-use)      -->
   <!-- ============================================ -->
+  <!--
+    OBSOLETO / REGISTRO HISTÓRICO: este arquivo são as instruções do agente
+    Gemini antecessor (a abordagem manual via IA que a ferramenta DocFormatter
+    Phase 3 substituiu). O vocabulário de specific-use abaixo
+    (data-available-in-repository, data-available-as-supplement, no-new-data)
+    NÃO é canônico. Os cinco valores SPS 1.10 canônicos, usados pela ferramenta,
+    estão em docs/scielo_context/jats/data_availability.md e em
+    DocFormatter.Core/Jats/DataAvailabilityClassifier.cs:
+      data-available, data-available-upon-request, data-in-article,
+      data-not-available, uninformed.
+    Mantido como registro do que o agente antigo fazia; não consultar como
+    fonte de verdade.
+  -->
   <specific-use-values>
     <value code="data-available-upon-request">Data available upon request</value>
     <value code="data-available-in-repository">Data available in public repository</value>

@@ -93,21 +93,23 @@ public sealed class JatsDocument
             root.WriteTo(writer);
         }
 
-        // XmlWriter emits empty elements as "<x />"; the SciELO corpus writes
-        // "<x/>". Text content never yields a literal " />" (XmlWriter escapes
-        // '>' as "&gt;"), so this rewrite only touches empty-element closers.
-        var serialized = RestoreTextContentQuotes(builder.ToString());
-        return serialized.Replace(" />", "/>", StringComparison.Ordinal);
+        // Restore the corpus serialization (escaped quotes in text; "<x/>" empty
+        // closers) in a single tag-aware pass, so the rewrites never reach a
+        // comment/CDATA payload that happens to contain a '"' or " />".
+        return RestoreCorpusSerialization(builder.ToString());
     }
 
-    // XmlWriter writes a double quote in element text content as a bare '"', but
-    // the SciELO corpus escapes it as "&quot;" (the corpus never uses a bare '"'
-    // in text content). Restoring the entity form in text content only — leaving
-    // markup, attribute delimiters, comments and CDATA untouched — is the last
-    // systematic XmlWriter divergence, so a no-op cycle stays byte-identical and
-    // an injection diffs to the injected tags alone (the writer's documented
-    // contract; ADR-002 "the XML is the only artifact modified").
-    private static string RestoreTextContentQuotes(string xml)
+    // Restores two systematic XmlWriter divergences from the SciELO corpus in one
+    // pass over the serialized string:
+    //   * in text content, a bare '"' is re-escaped to "&quot;" (the corpus never
+    //     uses a bare '"' in text);
+    //   * inside a tag token, the empty-element closer " />" is collapsed to "/>".
+    // Comments, CDATA, processing instructions and attribute delimiters are left
+    // byte-for-byte untouched — a literal '"' or " />" inside a comment/CDATA is
+    // content, not markup. A no-op cycle therefore stays byte-identical and an
+    // injection diffs to the injected tags alone (ADR-002 "the XML is the only
+    // artifact modified").
+    private static string RestoreCorpusSerialization(string xml)
     {
         var builder = new StringBuilder(xml.Length);
         var i = 0;
@@ -117,7 +119,18 @@ public sealed class JatsDocument
             if (c == '<')
             {
                 var end = ScanMarkupEnd(xml, i);
-                builder.Append(xml, i, end - i);
+
+                // Collapse " />" only inside a real tag token; a comment/CDATA/PI
+                // payload that contains " />" must survive unchanged.
+                if (Matches(xml, i, "<!--") || Matches(xml, i, "<![CDATA[") || Matches(xml, i, "<?"))
+                {
+                    builder.Append(xml, i, end - i);
+                }
+                else
+                {
+                    builder.Append(xml.Substring(i, end - i).Replace(" />", "/>", StringComparison.Ordinal));
+                }
+
                 i = end;
                 continue;
             }
