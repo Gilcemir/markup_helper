@@ -1,4 +1,5 @@
 using System.Reflection;
+using DocFormatter.Core.Jats;
 using DocFormatter.Core.Options;
 using DocFormatter.Core.Pipeline;
 using DocFormatter.Core.Reporting;
@@ -16,18 +17,39 @@ internal static class CliApp
     internal const int ExitCriticalAbort = 2;
     internal const int ExitVerifyMismatch = 3;
 
+    // A phase3 pairing skip in single-file mode: the document could not be paired
+    // (no matching docx, missing other.txt entry, DOI mismatch). It is a recoverable
+    // per-document skip (ADR-004), distinct from a crash (ExitCriticalAbort) and from
+    // success — batch mode likewise does not fail the run for a skip.
+    internal const int ExitPairingSkipped = 4;
+
     internal const string LogFileName = "_app.log";
     internal const string BatchSummaryFileName = "_batch_summary.txt";
 
     internal const string Phase1OutputSubdir = "formatted";
     internal const string Phase2OutputSubdir = "formatted-phase2";
+    internal const string Phase3OutputSubdir = "formatted-phase3";
 
     internal const string Phase2Subcommand = "phase2";
     internal const string Phase2VerifySubcommand = "phase2-verify";
+    internal const string Phase3Subcommand = "phase3";
+
+    internal const string NonInteractiveFlag = "--non-interactive";
+    internal const string OtherTableFileName = "other.txt";
+    internal const string MarkupSourceDirName = "scielo_markup";
+
+    // How far up from the package directory to search for other.txt (inclusive of
+    // the package directory itself). Covers the corpus layout
+    // examples/phase-3/{scielo_package,scielo_markup,other.txt} and flat layouts.
+    private const int Phase3LayoutSearchDepth = 5;
 
     public static int Run(string[] args, TextWriter stdout, TextWriter stderr)
+        => Run(args, Console.In, stdout, stderr);
+
+    public static int Run(string[] args, TextReader stdin, TextWriter stdout, TextWriter stderr)
     {
         ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(stdin);
         ArgumentNullException.ThrowIfNull(stdout);
         ArgumentNullException.ThrowIfNull(stderr);
 
@@ -63,6 +85,8 @@ internal static class CliApp
                     return RunPhase2(args.AsSpan(1).ToArray(), stdout, stderr);
                 case Phase2VerifySubcommand:
                     return RunPhase2Verify(args.AsSpan(1).ToArray(), stdout, stderr);
+                case Phase3Subcommand:
+                    return RunPhase3(args.AsSpan(1).ToArray(), stdin, stdout, stderr);
             }
         }
 
@@ -363,6 +387,293 @@ internal static class CliApp
         return anyFail ? ExitVerifyMismatch : ExitSuccess;
     }
 
+    internal static int RunPhase3(string[] args, TextReader stdin, TextWriter stdout, TextWriter stderr)
+    {
+        string? input = null;
+        string? nonInteractive = null;
+
+        foreach (var arg in args)
+        {
+            if (string.Equals(arg, NonInteractiveFlag, StringComparison.Ordinal)
+                || arg.StartsWith($"{NonInteractiveFlag}=", StringComparison.Ordinal))
+            {
+                var eq = arg.IndexOf('=');
+                if (eq < 0 || eq == arg.Length - 1)
+                {
+                    stderr.WriteLine($"error: {NonInteractiveFlag} requires a value: =accept or =fail");
+                    return ExitUsageError;
+                }
+
+                nonInteractive = arg[(eq + 1)..];
+            }
+            else if (input is null)
+            {
+                input = arg;
+            }
+            else
+            {
+                stderr.WriteLine("error: phase3 takes a single <input> argument");
+                stderr.WriteLine();
+                stderr.WriteLine(GetUsage());
+                return ExitUsageError;
+            }
+        }
+
+        if (input is null)
+        {
+            stderr.WriteLine(GetUsage());
+            return ExitUsageError;
+        }
+
+        if (!TrySelectConfirmer(nonInteractive, stdin, stdout, out var confirmer, out var selectError))
+        {
+            stderr.WriteLine($"error: {selectError}");
+            return ExitUsageError;
+        }
+
+        if (File.Exists(input))
+        {
+            if (!string.Equals(Path.GetExtension(input), ".xml", StringComparison.OrdinalIgnoreCase))
+            {
+                stderr.WriteLine($"error: only .xml files are supported, got '{Path.GetExtension(input)}'");
+                return ExitUsageError;
+            }
+
+            return RunPhase3Single(input, confirmer, stdout, stderr);
+        }
+
+        if (Directory.Exists(input))
+        {
+            return RunPhase3Batch(input, confirmer, stdout, stderr);
+        }
+
+        stderr.WriteLine($"path not found: {input}");
+        return ExitUsageError;
+    }
+
+    // Selects the confirmer policy (ADR-006): absent flag → interactive
+    // ConsoleConfirmer; =accept → AutoAcceptConfirmer; =fail → FailOnPromptConfirmer.
+    internal static bool TrySelectConfirmer(
+        string? nonInteractive,
+        TextReader stdin,
+        TextWriter stdout,
+        out IConfirmer confirmer,
+        out string? error)
+    {
+        switch (nonInteractive)
+        {
+            case null:
+                confirmer = new ConsoleConfirmer(stdin, stdout);
+                error = null;
+                return true;
+            case "accept":
+                confirmer = new AutoAcceptConfirmer();
+                error = null;
+                return true;
+            case "fail":
+                confirmer = new FailOnPromptConfirmer();
+                error = null;
+                return true;
+            default:
+                confirmer = new AutoAcceptConfirmer();
+                error = $"{NonInteractiveFlag} must be 'accept' or 'fail', got '{nonInteractive}'";
+                return false;
+        }
+    }
+
+    private static int RunPhase3Single(
+        string xmlPath,
+        IConfirmer confirmer,
+        TextWriter stdout,
+        TextWriter stderr)
+    {
+        var packageDir = Path.GetDirectoryName(Path.GetFullPath(xmlPath))
+            ?? Directory.GetCurrentDirectory();
+
+        if (!TryResolvePhase3Layout(packageDir, out var markupDir, out var otherTable, out var otherTablePath, out var layoutError))
+        {
+            stderr.WriteLine($"error: {layoutError}");
+            return ExitUsageError;
+        }
+
+        var outDir = Path.Combine(packageDir, Phase3OutputSubdir);
+        Directory.CreateDirectory(outDir);
+
+        using var logger = BuildLogger(Path.Combine(outDir, LogFileName));
+        logger.Information("phase3 inputs: other.txt={OtherTablePath}, markup={MarkupDir}", otherTablePath, markupDir);
+        using var services = BuildPhase3ServiceProvider();
+        var processor = new Phase3Processor(
+            services, logger, markupDir, otherTable, confirmer, Phase3OutputSubdir);
+
+        Phase3Outcome outcome;
+        try
+        {
+            outcome = processor.Process(xmlPath);
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "unexpected error processing {File}", xmlPath);
+            stderr.WriteLine($"error: {ex.Message}");
+            return ExitCriticalAbort;
+        }
+
+        switch (outcome.Kind)
+        {
+            case Phase3OutcomeKind.Processed:
+                stdout.WriteLine(
+                    outcome.Prompted
+                        ? $"✓ injected {outcome.FileName} (prompted)"
+                        : $"✓ injected {outcome.FileName}");
+                return ExitSuccess;
+            case Phase3OutcomeKind.Skipped:
+                stderr.WriteLine($"⤼ {outcome.FileName} skipped: {outcome.Reason}");
+                return ExitPairingSkipped;
+            default:
+                stderr.WriteLine($"✗ {outcome.FileName}: {outcome.Reason}");
+                return ExitCriticalAbort;
+        }
+    }
+
+    private static int RunPhase3Batch(
+        string folderPath,
+        IConfirmer confirmer,
+        TextWriter stdout,
+        TextWriter stderr)
+    {
+        var packageDir = Path.GetFullPath(folderPath);
+
+        if (!TryResolvePhase3Layout(packageDir, out var markupDir, out var otherTable, out var otherTablePath, out var layoutError))
+        {
+            stderr.WriteLine($"error: {layoutError}");
+            return ExitUsageError;
+        }
+
+        var outDir = Path.Combine(packageDir, Phase3OutputSubdir);
+        Directory.CreateDirectory(outDir);
+
+        using var logger = BuildLogger(Path.Combine(outDir, LogFileName));
+        logger.Information("phase3 inputs: other.txt={OtherTablePath}, markup={MarkupDir}", otherTablePath, markupDir);
+        using var services = BuildPhase3ServiceProvider();
+        var processor = new Phase3Processor(
+            services, logger, markupDir, otherTable, confirmer, Phase3OutputSubdir);
+
+        var inputs = Directory.EnumerateFiles(packageDir, "*.xml", SearchOption.TopDirectoryOnly)
+            .Where(p => !IsTransientArtifact(Path.GetFileName(p)))
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+
+        if (inputs.Count == 0)
+        {
+            stdout.WriteLine($"no .xml files found in {folderPath}");
+            File.WriteAllText(Path.Combine(outDir, BatchSummaryFileName), string.Empty);
+            return ExitSuccess;
+        }
+
+        var outcomes = new List<Phase3Outcome>(inputs.Count);
+        foreach (var inputFile in inputs)
+        {
+            try
+            {
+                outcomes.Add(processor.Process(inputFile));
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "unexpected error processing {File}", inputFile);
+                outcomes.Add(new Phase3Outcome(
+                    Path.GetFileNameWithoutExtension(inputFile),
+                    Phase3OutcomeKind.Failed,
+                    Prompted: false,
+                    ex.Message));
+            }
+        }
+
+        WritePhase3BatchSummary(Path.Combine(outDir, BatchSummaryFileName), outcomes);
+
+        var processed = outcomes.Count(o => o.Kind == Phase3OutcomeKind.Processed);
+        var prompted = outcomes.Count(o => o.Prompted);
+        var skipped = outcomes.Count(o => o.Kind == Phase3OutcomeKind.Skipped);
+        var failed = outcomes.Count(o => o.Kind == Phase3OutcomeKind.Failed);
+        stdout.WriteLine(
+            $"phase3 batch complete: processed={processed} prompted={prompted} skipped={skipped} failed={failed} ({outcomes.Count} file(s))");
+
+        // A Critical abort or a fail-on-prompt makes the whole run non-zero; a
+        // pairing skip is a per-document outcome and does not by itself fail the batch.
+        return failed > 0 ? ExitCriticalAbort : ExitSuccess;
+    }
+
+    // Resolves the auxiliary inputs from the package directory: walk up (inclusive)
+    // to the first directory holding other.txt — the phase-3 root — and take its
+    // scielo_markup subdirectory as the docx source (falling back to the root
+    // itself when that subdirectory is absent). No extra CLI flags are introduced.
+    internal static bool TryResolvePhase3Layout(
+        string packageDir,
+        out string markupSourceDir,
+        out OtherTable otherTable,
+        out string otherTablePath,
+        out string? error)
+    {
+        var dir = new DirectoryInfo(Path.GetFullPath(packageDir));
+        for (var i = 0; i < Phase3LayoutSearchDepth && dir is not null; i++, dir = dir.Parent)
+        {
+            var otherPath = Path.Combine(dir.FullName, OtherTableFileName);
+            if (!File.Exists(otherPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                otherTable = OtherTable.Load(otherPath);
+            }
+            catch (InvalidDataException ex)
+            {
+                markupSourceDir = string.Empty;
+                otherTable = null!;
+                otherTablePath = string.Empty;
+                error = $"failed to load {otherPath}: {ex.Message}";
+                return false;
+            }
+
+            var markup = Path.Combine(dir.FullName, MarkupSourceDirName);
+            markupSourceDir = Directory.Exists(markup) ? markup : dir.FullName;
+            otherTablePath = otherPath;
+            error = null;
+            return true;
+        }
+
+        markupSourceDir = string.Empty;
+        otherTable = null!;
+        otherTablePath = string.Empty;
+        error = $"could not locate '{OtherTableFileName}' searching up from '{packageDir}'";
+        return false;
+    }
+
+    private static void WritePhase3BatchSummary(string path, IReadOnlyList<Phase3Outcome> outcomes)
+    {
+        var processed = outcomes.Count(o => o.Kind == Phase3OutcomeKind.Processed);
+        var prompted = outcomes.Count(o => o.Prompted);
+        var skipped = outcomes.Count(o => o.Kind == Phase3OutcomeKind.Skipped);
+        var failed = outcomes.Count(o => o.Kind == Phase3OutcomeKind.Failed);
+
+        var lines = new List<string>(outcomes.Count + 1)
+        {
+            $"processed={processed} prompted={prompted} skipped={skipped} failed={failed}",
+        };
+
+        foreach (var o in outcomes)
+        {
+            var marker = o.Kind switch
+            {
+                Phase3OutcomeKind.Processed => o.Prompted ? "✓ prompted" : "✓",
+                Phase3OutcomeKind.Skipped => $"⤼ skipped {o.Reason}",
+                _ => $"✗ {o.Reason}",
+            };
+            lines.Add($"{o.FileName}.xml {marker}");
+        }
+
+        File.WriteAllLines(path, lines);
+    }
+
     internal static bool IsTransientArtifact(string fileName)
         => fileName.StartsWith("~$", StringComparison.Ordinal)
         || fileName.StartsWith("._", StringComparison.Ordinal);
@@ -422,12 +733,26 @@ internal static class CliApp
         return services.BuildServiceProvider();
     }
 
+    internal static ServiceProvider BuildPhase3ServiceProvider()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTransient<IReport, Report>();
+
+        services.AddPhase3Injectors();
+
+        services.AddTransient<Phase3Pipeline>();
+
+        return services.BuildServiceProvider();
+    }
+
     internal static string GetUsage() =>
         """
         Usage: docformatter <path-to-file.docx>
                docformatter <path-to-folder>
                docformatter phase2 <path-to-file.docx | path-to-folder>
                docformatter phase2-verify <before-dir> <after-dir>
+               docformatter phase3 <path-to-file.xml | path-to-folder> [--non-interactive=accept|fail]
                docformatter --help
                docformatter --version
 
@@ -440,10 +765,16 @@ internal static class CliApp
                        <after-dir>/<same-name>.docx, scoped to Phase2Scope.Current. Prints
                        [PASS] <id> or [FAIL] <id> with first-divergence context.
 
+        phase3:        injects the four JATS tags into each XML; outputs go to <dir>/formatted-phase3/
+                       (modified .xml, .report.txt, .diagnostic.json) plus _batch_summary.txt for a folder.
+                       Pairs each XML with its docx and other.txt by walking up to the directory holding
+                       other.txt (its scielo_markup/ holds the docx). --non-interactive=accept writes
+                       best-guess proposals; =fail aborts on any prompt; absent prompts interactively.
+
         Exit codes:
           0  success (file or batch ran, regardless of warnings; phase2-verify all pass)
           1  usage error or path not found
-          2  critical pipeline abort (single-file mode only)
+          2  critical pipeline abort (single-file mode, or phase3 fail-on-prompt / any failed batch doc)
           3  phase2-verify mismatch on any pair
         """;
 

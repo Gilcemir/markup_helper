@@ -76,6 +76,17 @@ decisions.
   its target with high confidence MUST skip insertion and record a
   machine-readable reason code in `diagnostic.json`; never abort, never
   emit partial markup. → phase-2-tagging-author-fixes/adr-002
+- **Phase 3 confidence-gated injection** — Deterministic/high-confidence
+  values auto-applied without prompting; only genuinely ambiguous calls
+  pause for inline confirm/override; every decision (auto included)
+  logged in `.report.txt`. → phase-3-jats-tags/adr-001
+- **Phase 3 IJatsInjector pipeline** — New `IJatsInjector` +
+  `Phase3Context` with four injectors wired via `AddPhase3Injectors()`
+  and a `phase3` subcommand; mirrors Phase 1/2 but typed for docx→XML,
+  not `IFormattingRule`. → phase-3-jats-tags/adr-003
+- **Phase 3 value sourcing** — Reads data-availability / CRediT / editor
+  from the read-only docx and the `other` number from `other.txt`; the
+  JATS XML is the only mutation target. → phase-3-jats-tags/adr-002
 - **Pipeline architecture (MVP)** — 4 sibling rules (one per extracted
   field), not a single consolidated rule. Establishes the pattern for
   later phases. → metadata/adr-001
@@ -115,6 +126,15 @@ Text extraction, tokenization, heuristics and regex for field detection
 - **ORCID extraction** — Extracts (does not remove) ORCID URLs from
   the authors line and stores in metadata; intentional divergence from
   the MVP spec. → metadata/adr-003
+- **Phase 3 CRediT auto-mapping** — Auto-applies `<role>` only when a
+  structured (role-keyed/author-keyed) statement's terms all
+  exact-match the CRediT table and every initial resolves to one
+  `<contrib>`; free prose / unknown terms / unresolved initials prompt
+  (free-text via adr-007). → phase-3-jats-tags/adr-005
+- **Phase 3 docx↔XML pairing** — Pairs on `elocation-id` (docx `[doc]`
+  `elocatid` ↔ XML `<elocation-id>`, also the `other.txt` key) and
+  verifies with a DOI cross-check; fails loudly on mismatch/missing.
+  → phase-3-jats-tags/adr-004
 - **Phase 4 date parser** — Rewrite `HistDateParser` from scratch in
   DocFormatter conventions; treat
   `Marcador_de_referencia/BibliographyHandlers/AccessedOnHandler.cs`
@@ -135,6 +155,11 @@ cascade, section promotion, italic preservation).
 - **Phase 3 = 2 Optional rules** — `MoveHistoryRule` and
   `PromoteSectionsRule` kept separate, not combined into one rule.
   → section/adr-001
+- **Phase 3 CRediT free-text fallback** — Operator-chosen
+  `ConfirmDisposition.FreeText` emits every `<role>` without
+  `@content-type` (SPS per-document all-or-nothing) when terms are
+  unrecognized; never auto-selected; amends adr-005, extends adr-006.
+  → phase-3-jats-tags/adr-007
 - **Italic structural stripping** — Uniformity heuristic: strip italic
   only if EVERY run in the paragraph is italic; preserves intentional
   italics (species names, emphasis). → polish/adr-002
@@ -162,6 +187,11 @@ CLI surface, diagnostic output, build/CI, output file layout.
   (brackets gone, inner content kept) before string compare; first
   divergence reported with ±80 chars of context.
   → phase-2-tagging-author-fixes/adr-006
+- **Phase 3 confirmation gate** — `IConfirmer.Confirm` with default
+  `ConsoleConfirmer`; `--non-interactive=accept|fail` selects
+  auto-accept / fail-on-prompt for tests and batch; golden corpus runs
+  `accept`, a `fail` CI run flags newly-ambiguous docs.
+  → phase-3-jats-tags/adr-006
 - **`phase2` / `phase2-verify` CLI** — Hand-rolled subcommand
   dispatcher inside `CliApp.Run` extends the existing parser; rejects
   `System.CommandLine` migration as scope creep.
@@ -185,6 +215,10 @@ was decided during feature X?"*.
   `xmlabstr`, `kwdgrp`, author xrefs/`authorid`/`corresp`, `[hist]`
   with date parsing) plus a Stage-1 fix for `mark_authors` on
   5313/5449.
+- [phase-3-jats-tags/](phase-3-jats-tags/) — 7 ADRs — Phase 3: inject
+  four SPS 1.10 JATS tags (`other` id, `edited-by`, data-availability,
+  CRediT roles) into Markup XML, sourcing values from a paired docx +
+  `other.txt` with a confidence-gated confirmation flow.
 - [section-formatting-and-history-move/](section-formatting-and-history-move/)
   — 5 ADRs — Phase 3: move history block, visually promote section /
   sub-section, INV-01 (strict content preservation).

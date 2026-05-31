@@ -9,7 +9,8 @@ public sealed record DiagnosticDocument(
     DiagnosticFields Fields,
     DiagnosticFormatting? Formatting,
     IReadOnlyList<DiagnosticIssue> Issues,
-    DiagnosticPhase2? Phase2 = null)
+    DiagnosticPhase2? Phase2 = null,
+    DiagnosticPhase3? Phase3 = null)
 {
     public bool Equals(DiagnosticDocument? other)
     {
@@ -29,7 +30,8 @@ public sealed record DiagnosticDocument(
             && Fields.Equals(other.Fields)
             && Equals(Formatting, other.Formatting)
             && Issues.SequenceEqual(other.Issues)
-            && Equals(Phase2, other.Phase2);
+            && Equals(Phase2, other.Phase2)
+            && Equals(Phase3, other.Phase3);
     }
 
     public override int GetHashCode()
@@ -45,10 +47,38 @@ public sealed record DiagnosticDocument(
             hash.Add(issue);
         }
         hash.Add(Phase2);
+        hash.Add(Phase3);
 
         return hash.ToHashCode();
     }
 }
+
+/// <summary>
+/// The Phase 3 (JATS tag-injection) diagnostic section: one entry per injected
+/// tag carrying the value that reached the XML and the disposition that produced
+/// it (TechSpec "Monitoring and Observability"). The four tags appear in the
+/// injector run order (ADR-003).
+/// </summary>
+public sealed record DiagnosticPhase3(
+    DiagnosticPhase3Tag OtherId,
+    DiagnosticPhase3Tag EditedBy,
+    DiagnosticPhase3Tag DataAvailability,
+    DiagnosticPhase3Tag CreditRoles);
+
+/// <summary>
+/// A single Phase 3 tag outcome: the injector <paramref name="Tag"/> label, the
+/// <paramref name="Value"/> written to the XML (the <c>other</c> number, the
+/// <c>specific-use</c> category, the joined editor names, or the role count;
+/// <see langword="null"/> when nothing was written), and the
+/// <paramref name="Disposition"/> that produced it (a
+/// <see cref="DocFormatter.Core.Jats.ConfirmDisposition"/> name for prompted tags,
+/// else one of <c>autoApplied</c>/<c>skipped</c>/
+/// <c>absent</c>/<c>failed</c>).
+/// </summary>
+public sealed record DiagnosticPhase3Tag(
+    string Tag,
+    string? Value,
+    string Disposition);
 
 public sealed record DiagnosticPhase2(
     DiagnosticField Elocation,

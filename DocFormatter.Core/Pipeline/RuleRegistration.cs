@@ -1,3 +1,4 @@
+using DocFormatter.Core.Jats;
 using DocFormatter.Core.Rules;
 using DocFormatter.Core.Rules.Phase2;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +56,28 @@ public static class RuleRegistration
         // the INTRODUCTION anchor. Order within AddPhase2Rules is
         // documentation-only.
         services.AddTransient<IFormattingRule, EmitHistTagRule>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the four Phase 3 <see cref="IJatsInjector"/>s in their canonical
+    /// run order (ADR-003), mirroring <see cref="AddPhase2Rules"/>. The order is
+    /// load-bearing: the <c>other</c>-id (Critical) runs first so a missing DOI or
+    /// <c>other</c> number aborts the document before the three Optional injectors
+    /// do any work, and the remaining three follow the document's natural
+    /// front-to-back metadata order (author-notes → back/data-availability →
+    /// contrib/credit). <see cref="Phase3Pipeline"/> consumes them via
+    /// <see cref="IEnumerable{T}"/> in registration order.
+    /// </summary>
+    public static IServiceCollection AddPhase3Injectors(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddTransient<IJatsInjector, OtherIdInjector>();
+        services.AddTransient<IJatsInjector, EditedByInjector>();
+        services.AddTransient<IJatsInjector, DataAvailabilityInjector>();
+        services.AddTransient<IJatsInjector, CreditRolesInjector>();
 
         return services;
     }
