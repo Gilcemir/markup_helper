@@ -1,6 +1,10 @@
 # DocFormatter
 
-CLI em .NET 10 que normaliza artigos científicos em `.docx` segundo regras editoriais fixas — extrai DOI/elocation/autores/afiliações/abstract/keywords da folha-rosto crua, reescreve o cabeçalho no formato de saída, promove níveis de seção e remove hyperlinks descartáveis (incluindo ORCID).
+CLI em .NET 10 que prepara artigos científicos para o fluxo SciELO, em três fases:
+
+- **Phase 1** — normaliza o `.docx` segundo regras editoriais fixas: extrai DOI/elocation/autores/afiliações/abstract/keywords da folha-rosto crua, reescreve o cabeçalho no formato de saída, promove níveis de seção e remove hyperlinks descartáveis (incluindo ORCID).
+- **Phase 2** — injeta as bracket tags do SciELO Markup no `.docx` (abstract/keywords/elocation/corresp/hist/author-xrefs).
+- **Phase 3** — pós-processa o XML JATS gerado pelo SciELO Markup, injetando as quatro marcações SPS 1.10 que a ferramenta não gera: `article-id pub-id-type="other"`, `fn fn-type="edited-by"`, `sec sec-type="data-availability"` e CRediT `<role>`.
 
 Desenvolvido no macOS, executado no Windows 10 como `docformatter.exe` self-contained.
 
@@ -49,7 +53,17 @@ docformatter phase2 "C:\caminho\pasta"
 # Phase 2 verify: diff scoped contra um corpus AFTER curado (gate de release)
 docformatter phase2-verify "C:\caminho\before" "C:\caminho\after"
 # → imprime [PASS] <id> / [FAIL] <id> por par; exit 3 se algum par diverge
+
+# Phase 3: injeta as 4 tags JATS (other-id/edited-by/data-availability/CRediT roles) no XML
+docformatter phase3 "C:\caminho\artigo.xml"
+docformatter phase3 "C:\caminho\pasta"
+docformatter phase3 "C:\caminho\pasta" --non-interactive=accept   # sem prompts (aceita best-guess)
+docformatter phase3 "C:\caminho\pasta" --non-interactive=fail     # aborta em qualquer prompt
+# → saídas em formatted-phase3/ (.xml modificado + .report.txt + .diagnostic.json)
+#   + _batch_summary.txt no modo pasta
 ```
+
+O phase3 pareia cada XML com seu docx-fonte e com o `other.txt` sozinho: sobe diretórios a partir do XML até achar o `other.txt` (o `scielo_markup/` ao lado contém os docx) — sem flags extras. Pareamento é por elocation-id, verificado com DOI; sem a flag `--non-interactive`, casos ambíguos são confirmados interativamente no console.
 
 Saída padrão da pasta `formatted/`:
 
@@ -65,10 +79,11 @@ Saída padrão da pasta `formatted/`:
 
 | Código | Significado |
 |---|---|
-| `0` | sucesso (com ou sem warnings; `phase2-verify` com todos os pares PASS) |
+| `0` | sucesso (com ou sem warnings; `phase2-verify` com todos os pares PASS; batch phase3 com skips mas sem falhas) |
 | `1` | erro de uso (argumento, flag desconhecida, caminho inexistente, extensão errada) |
-| `2` | abort crítico do pipeline (modo single-file) |
+| `2` | abort crítico do pipeline (modo single-file; phase3 com `--non-interactive=fail` que promptaria, ou qualquer doc failed no batch) |
 | `3` | `phase2-verify` divergiu em pelo menos um par |
+| `4` | phase3 single-file: documento não pareado (sem docx correspondente, sem entrada no `other.txt` ou DOI divergente) — skip recuperável, não é erro |
 
 ### Atualizar
 
@@ -101,11 +116,16 @@ make phase2 FILE=examples/phase-2/before/5449.docx   # Phase 2 pipeline em um ar
 make phase2-all                                      # Phase 2 em batch sobre examples/phase-2/before/
 make phase2-verify                                   # diff scoped before/ vs after/ (gate de release)
 
+make phase3 XML=examples/phase-3/scielo_package/....xml   # Phase 3 em um XML
+make phase3-all               # Phase 3 batch no scielo_package/ (--non-interactive=accept)
+make phase3-all-interactive   # idem, confirmando prompt a prompt
+
 make publish-mac     # binário osx-arm64 self-contained pra dev local
 make publish-win     # delega pra DocFormatter.Cli/publish.sh (win-x64)
 
+make format          # dotnet format
 make logs            # tail no _app.log mais recente sob examples/
-make clean           # limpa bin/, obj/, formatted/ e formatted-phase2/ de examples/
+make clean           # limpa bin/, obj/, formatted/, formatted-phase2/ e formatted-phase3/ de examples/
 ```
 
 ### Estrutura do solution
@@ -113,11 +133,14 @@ make clean           # limpa bin/, obj/, formatted/ e formatted-phase2/ de examp
 ```
 DocFormatter.sln
 ├── DocFormatter.Core/    lógica pura (regras, pipeline, contexto, opções)
+│   └── Jats/             pipeline da Phase 3 (injectors JATS, pareamento, confirmers)
 ├── DocFormatter.Cli/     entry point (Program.cs → CliApp.Run)
 └── DocFormatter.Tests/   xUnit — golden files em Samples/
 ```
 
 `Directory.Build.props` trava `TargetFramework=net10.0`, `Nullable=enable`, `TreatWarningsAsErrors=true`.
+
+Decisões de arquitetura ficam em `docs/decisions/` (ADRs agrupados por feature — ex.: `phase-3-jats-tags/`) e os invariantes consolidados em `docs/INVARIANTS.md`.
 
 ---
 

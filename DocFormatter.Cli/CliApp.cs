@@ -776,6 +776,7 @@ internal static class CliApp
           1  usage error or path not found
           2  critical pipeline abort (single-file mode, or phase3 fail-on-prompt / any failed batch doc)
           3  phase2-verify mismatch on any pair
+          4  phase3 single-file pairing skip (no matching docx, missing other.txt entry, DOI mismatch)
         """;
 
     internal static string GetVersion()
