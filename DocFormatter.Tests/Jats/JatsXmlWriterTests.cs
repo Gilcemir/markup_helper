@@ -247,6 +247,36 @@ public sealed class JatsXmlWriterTests
     }
 
     [Fact]
+    public void Save_InjectedTextWithAmpersand_WritesAmpEntityToDisk()
+    {
+        // End-to-end guard: an injected element whose text contains '&' must reach
+        // disk as "&amp;". RestoreCorpusSerialization re-escapes a bare '"' in text
+        // and collapses " />" to "/>", and the assertion confirms it does not also
+        // corrupt the '&amp;' that XmlWriter already produced.
+        var source = WriteTemp(SampleXml, new UTF8Encoding(false));
+        var output = Path.Combine(Path.GetTempPath(), $"jats-amp-{Guid.NewGuid():N}.xml");
+        try
+        {
+            var doc = JatsXmlWriter.Load(source);
+            var front = doc.Document.Root!.Element("front")!;
+            var anchor = front.Elements().Last();
+            var injected = JatsXmlWriter.BuildLeaf("role", "Writing – review & editing");
+            JatsXmlWriter.InsertAfter(anchor, injected, depth: 2);
+
+            doc.Save(output);
+
+            var text = File.ReadAllText(output, Encoding.UTF8);
+            Assert.Contains("<role>Writing – review &amp; editing</role>", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("Writing – review & editing", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(output);
+        }
+    }
+
+    [Fact]
     public void Save_NullPath_Throws()
     {
         var source = WriteTemp(SampleXml, new UTF8Encoding(false));

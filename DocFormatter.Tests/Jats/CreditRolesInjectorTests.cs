@@ -516,6 +516,54 @@ public sealed class CreditRolesInjectorTests
     }
 
     [Fact]
+    public void Apply_AutoApply_WritingReviewEditingTerm_SerializesAmpersandAsEntity()
+    {
+        // The canonical CRediT Display for the writing-review-editing slug carries
+        // a literal '&' (CreditTermTable). The deterministic path stores it as text
+        // on the XElement; the serializer (XLinq → XmlWriter) is responsible for
+        // escaping it to "&amp;" on the way out, otherwise the emitted XML is
+        // malformed.
+        var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
+
+        new CreditRolesInjector().Apply(
+            CreateContext(xml, "Writing - review & editing: Lopes DAPS", new ThrowingConfirmer()),
+            new Report());
+
+        var role = Assert.Single(RolesOf(xml, "Lopes"));
+        Assert.Equal("Writing – review & editing", role.Value);
+
+        var serialized = xml.ToString(SaveOptions.DisableFormatting);
+        Assert.Contains("Writing – review &amp; editing</role>", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("Writing – review & editing</role>", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_FreeText_VerbatimTermWithAmpersand_SerializesAmpersandAsEntity()
+    {
+        // The free-text path (ADR-007) emits the verbatim written term from the docx
+        // without @content-type. A custom term that contains '&' must serialize as
+        // "&amp;" — failing to escape would produce malformed XML in the only branch
+        // where unmapped author prose reaches <role> as-is.
+        var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
+        var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.FreeText));
+
+        new CreditRolesInjector().Apply(
+            CreateContext(
+                xml,
+                "Conceptualization: Lopes DAPS; Conception & design: Lopes DAPS",
+                confirmer),
+            new Report());
+
+        var roles = RolesOf(xml, "Lopes");
+        Assert.Equal(2, roles.Count);
+        Assert.Equal("Conception & design", roles[1].Value);
+
+        var serialized = xml.ToString(SaveOptions.DisableFormatting);
+        Assert.Contains("<role>Conception &amp; design</role>", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("Conception & design</role>", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_OverCorpusXml_5449_Prose_SurfacesProposal_NoRolesWritten()
     {
         var doc = JatsXmlWriter.Load(CorpusPackagePath("1984-7033-cbab-26-02-e54492621.xml"));
