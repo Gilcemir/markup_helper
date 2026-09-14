@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Documentation and v0.3.1 release preparation
 type: docs
 complexity: low
@@ -31,10 +31,10 @@ Document the new operator-visible behavior (the `contrib-names` rule, the batch 
 </requirements>
 
 ## Subtasks
-- [ ] 10.1 Update README Phase 3 and Phase 1 sections.
-- [ ] 10.2 Update CLI help text if applicable and its test.
-- [ ] 10.3 Review ADRs 001–006 against the implemented code; fix drift.
-- [ ] 10.4 Verify the branch's commit history is release-notes ready and `make test` plus `make phase2-verify` are green.
+- [x] 10.1 Update README Phase 3 and Phase 1 sections.
+- [x] 10.2 Update CLI help text if applicable and its test.
+- [x] 10.3 Review ADRs 001–006 against the implemented code; fix drift.
+- [x] 10.4 Verify the branch's commit history is release-notes ready and `make test` plus `make phase2-verify` are green.
 
 ## Implementation Details
 Files: `README.md` (Phase 3 section, "Versionamento"/release notes unaffected), `DocFormatter.Cli/CliApp.cs` usage text (~line 757) and its test if one asserts the usage string, `.compozy/tasks/credit-corpus-v26n3-fixes/adrs/*.md`. Post-merge procedure remains `make release VERSION=v0.3.1` on `main`.
@@ -59,10 +59,10 @@ Files: `README.md` (Phase 3 section, "Versionamento"/release notes unaffected), 
 
 ## Tests
 - Unit tests:
-  - [ ] CLI usage test (if present) matches the updated help text.
+  - [x] CLI usage test (if present) matches the updated help text.
 - Integration tests:
-  - [ ] `make test` exits 0.
-  - [ ] `make phase2-verify` exits 0.
+  - [x] `make test` exits 0.
+  - [x] `make phase2-verify` exits 0.
 - Test coverage target: >=80%
 - All tests must pass
 

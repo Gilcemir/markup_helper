@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Tiered and variant candidate initials in AuthorInitialsResolver
 type: bugfix
 complexity: medium
@@ -31,11 +31,11 @@ Make bare-initials resolution prefer full-name candidates over given-names-only 
 </requirements>
 
 ## Subtasks
-- [ ] 1.1 Replace the flat `CandidateInitials` set with a two-tier structure and update `Resolve` to try Tier 1 before Tier 2.
-- [ ] 1.2 Replace `Initials(string)` with a variant generator handling hyphens and particle casing, combined by cartesian product.
-- [ ] 1.3 Make `IsInitialsToken` internal for the parser.
-- [ ] 1.4 Add resolver tests for the v26n3 cases and the tier/variant rules.
-- [ ] 1.5 Run the full test suite; all existing resolver and injector tests stay green.
+- [x] 1.1 Replace the flat `CandidateInitials` set with a two-tier structure and update `Resolve` to try Tier 1 before Tier 2.
+- [x] 1.2 Replace `Initials(string)` with a variant generator handling hyphens and particle casing, combined by cartesian product.
+- [x] 1.3 Make `IsInitialsToken` internal for the parser.
+- [x] 1.4 Add resolver tests for the v26n3 cases and the tier/variant rules.
+- [x] 1.5 Run the full test suite; all existing resolver and injector tests stay green.
 
 ## Implementation Details
 Modify `DocFormatter.Core/Jats/AuthorInitialsResolver.cs`: `Resolve` (bare-initials branch), `ResolveBySurname` (narrowing), `CandidateInitials`, `Initials`, `Particles`, `IsInitialsToken` visibility. See TechSpec "Resolver (`AuthorInitialsResolver`)" for the candidate and variant rules, and ADR-004 for rationale. `Fold` and `NormalizeInitials` are unchanged.
@@ -60,16 +60,16 @@ Modify `DocFormatter.Core/Jats/AuthorInitialsResolver.cs`: `Resolve` (bare-initi
 
 ## Tests
 - Unit tests:
-  - [ ] "SA" with contribs Abid/Saleem, Khan/Sajjad Ahmad, Sohail/Muhammad, Zahid/Saleem resolves to Abid (Tier 1 wins over Tier 2).
-  - [ ] "LBB" resolves to Barboza-Barquero/Luis; "LB" also resolves to the same contributor.
-  - [ ] "TVB" resolves to Bui/Truong Van; "TB" also resolves to Bui.
-  - [ ] "MS" resolves to "Da Silva"/"Maria" (capitalized particle dropped variant) and "MDS" resolves too (kept variant).
-  - [ ] "TTR" against Rocha/"Taine Teotônio Teixeira da" is NotFound; "JGS" against Simão/"Janine Magalhães Guedes" is NotFound; "MRC" against Costa/"Marcia" is NotFound.
-  - [ ] Two contributors both matching a key in Tier 1 → Ambiguous (tiering does not remove ambiguity within a tier).
-  - [ ] A key matching one contributor only in Tier 2 while no Tier 1 match exists → Resolved (Tier 2 fallback still works, e.g. 5316-style full name in given-names).
-  - [ ] Existing tests (`ATAJ`, surname+initials forms) unchanged and green.
+  - [x] "SA" with contribs Abid/Saleem, Khan/Sajjad Ahmad, Sohail/Muhammad, Zahid/Saleem resolves to Abid (Tier 1 wins over Tier 2).
+  - [x] "LBB" resolves to Barboza-Barquero/Luis; "LB" also resolves to the same contributor.
+  - [x] "TVB" resolves to Bui/Truong Van; "TB" also resolves to Bui.
+  - [x] "MS" resolves to "Da Silva"/"Maria" (capitalized particle dropped variant) and "MDS" resolves too (kept variant).
+  - [x] "TTR" against Rocha/"Taine Teotônio Teixeira da" is NotFound; "JGS" against Simão/"Janine Magalhães Guedes" is NotFound; "MRC" against Costa/"Marcia" is NotFound.
+  - [x] Two contributors both matching a key in Tier 1 → Ambiguous (tiering does not remove ambiguity within a tier).
+  - [x] A key matching one contributor only in Tier 2 while no Tier 1 match exists → Resolved (Tier 2 fallback still works, e.g. 5316-style full name in given-names).
+  - [x] Existing tests (`ATAJ`, surname+initials forms) unchanged and green.
 - Integration tests:
-  - [ ] `CreditRolesInjectorTests` and `Phase3PipelineIntegrationTests` pass without modification.
+  - [x] `CreditRolesInjectorTests` and `Phase3PipelineIntegrationTests` pass without modification.
 - Test coverage target: >=80%
 - All tests must pass
 

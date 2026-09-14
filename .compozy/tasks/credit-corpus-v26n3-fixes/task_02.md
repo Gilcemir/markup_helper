@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Author-keyed CREDIT grammar with `;`/`,` separators and initials-block lookback
 type: bugfix
 complexity: medium
@@ -30,11 +30,11 @@ Rewrite `TryParseAuthorKeyed` so that `;` and `,` separate terms and `;`, `,` an
 </requirements>
 
 ## Subtasks
-- [ ] 2.1 Rewrite `TryParseAuthorKeyed` per the TechSpec algorithm, reusing `IsInitialsToken` from task_01.
-- [ ] 2.2 Update the XML doc comments on `Parse`/`TryParseAuthorKeyed` to describe the widened grammar and the lookback rule.
-- [ ] 2.3 Add corpus tests using the real v26n3 statement texts (from the read-only evidence prompt) with exact per-author term expectations.
-- [ ] 2.4 Add negative tests for the new Prose fallbacks.
-- [ ] 2.5 Run the full suite; `CreditRolesInjectorTests` and pipeline tests stay green.
+- [x] 2.1 Rewrite `TryParseAuthorKeyed` per the TechSpec algorithm, reusing `IsInitialsToken` from task_01.
+- [x] 2.2 Update the XML doc comments on `Parse`/`TryParseAuthorKeyed` to describe the widened grammar and the lookback rule.
+- [x] 2.3 Add corpus tests using the real v26n3 statement texts (from the read-only evidence prompt) with exact per-author term expectations.
+- [x] 2.4 Add negative tests for the new Prose fallbacks.
+- [x] 2.5 Run the full suite; `CreditRolesInjectorTests` and pipeline tests stay green.
 
 ## Implementation Details
 Modify `DocFormatter.Core/Jats/CreditStatementParser.cs` (`TryParseAuthorKeyed`, `SplitTrim` to accept multiple separators). Statement texts for tests: `/Users/gilcemir.angelo/Documents/personal_workspace/Trabalho/CBAB/v26/n3/PROMPT_credit_roles_v26n3.md` (read-only; copy the strings into the test file). See ADR-003 for the alternatives rejected.
@@ -60,19 +60,19 @@ Modify `DocFormatter.Core/Jats/CreditStatementParser.cs` (`TryParseAuthorKeyed`,
 
 ## Tests
 - Unit tests:
-  - [ ] 5642 text → AuthorKeyed; EVT has exactly 11 terms, all mapping via `TryMap`.
-  - [ ] 5412 text → AuthorKeyed; AN and SR each have the same 12 terms.
-  - [ ] 5501 text → AuthorKeyed with 5 authors; CDC = [Methodology, Supervision, Validation, Resources, Writing - review & editing]; CFA has 12 terms including Project administration and Funding acquisition; no junk term contains `;` or `:`.
-  - [ ] 5547 text → AuthorKeyed with 5 authors (EAA, ASGC, HSP, LCM, PGSM); ASGC has 8 terms; no term contains `;`.
-  - [ ] 5613 text → AuthorKeyed with NHN, TVB, QHTP; QHTP = [Data curation, Formal analysis].
-  - [ ] 5528 text → AuthorKeyed; JILR contains "Writing - Original Draft" and "Writing - review & editing" as separate terms; ORJC has Validation.
-  - [ ] 5441 text → AuthorKeyed; CFA and JAC each have 7 terms (Conceptualization, Methodology, Data curation, Formal analysis, Investigation, Software, Visualization, Writing - original draft de-duplicated as written) and no term contains `;`.
-  - [ ] "ABC: Methodology; DEF" (pending key never closed) → Prose.
-  - [ ] "ABC: Methodology; DEF; Software" (initials block followed by a term) → Prose.
-  - [ ] "ABC: ; DEF: Software" (entry without terms) → Prose.
-  - [ ] The four existing tests pass unchanged.
+  - [x] 5642 text → AuthorKeyed; EVT has exactly 11 terms, all mapping via `TryMap`.
+  - [x] 5412 text → AuthorKeyed; AN and SR each have the same 12 terms.
+  - [x] 5501 text → AuthorKeyed with 5 authors; CDC = [Methodology, Supervision, Validation, Resources, Writing - review & editing]; CFA has 12 terms including Project administration and Funding acquisition; no junk term contains `;` or `:`.
+  - [x] 5547 text → AuthorKeyed with 5 authors (EAA, ASGC, HSP, LCM, PGSM); ASGC has 8 terms; no term contains `;`.
+  - [x] 5613 text → AuthorKeyed with NHN, TVB, QHTP; QHTP = [Data curation, Formal analysis].
+  - [x] 5528 text → AuthorKeyed; JILR contains "Writing - Original Draft" and "Writing - review & editing" as separate terms; ORJC has Validation.
+  - [x] 5441 text → AuthorKeyed; CFA and JAC each have the same de-duplicated list (Conceptualization, Methodology, Data curation, Formal analysis, Investigation, Software, Visualization, Writing - original draft, Writing - review & editing — 9 terms; the original "7 terms" count was a slip) and no term contains `;`.
+  - [x] "ABC: Methodology; DEF" (pending key never closed) → Prose.
+  - [x] "ABC: Methodology; DEF; Software" (initials block followed by a term) → Prose.
+  - [x] "ABC: ; DEF: Software" (entry without terms) → Prose.
+  - [x] The four existing tests pass unchanged.
 - Integration tests:
-  - [ ] `CreditRolesInjectorTests` pass; a `;`-separated statement injected end-to-end is covered in task_04.
+  - [x] `CreditRolesInjectorTests` pass; a `;`-separated statement injected end-to-end is covered in task_04.
 - Test coverage target: >=80%
 - All tests must pass
 

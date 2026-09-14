@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Batch summary pendency block for CRediT and broken names
 type: backend
 complexity: medium
@@ -31,10 +31,10 @@ Extend `_batch_summary.txt` so each article with a CRediT pendency or a broken c
 </requirements>
 
 ## Subtasks
-- [ ] 7.1 Extend `Phase3Outcome` and its construction in `Phase3Processor`.
-- [ ] 7.2 Extend `WritePhase3BatchSummary` with the pendency block.
-- [ ] 7.3 Add `CliPhase3Tests` for clean, pending, prose, header-empty and broken-name articles.
-- [ ] 7.4 Run the full suite.
+- [x] 7.1 Extend `Phase3Outcome` and its construction in `Phase3Processor`.
+- [x] 7.2 Extend `WritePhase3BatchSummary` with the pendency block.
+- [x] 7.3 Add `CliPhase3Tests` for clean, pending, prose, header-empty and broken-name articles.
+- [x] 7.4 Run the full suite.
 
 ## Implementation Details
 Modify `DocFormatter.Cli/CliApp.cs` (`WritePhase3BatchSummary` ~lines 651-675, `Phase3Outcome` record) and `DocFormatter.Cli/Phase3Processor.cs` (outcome construction; the per-file `IReport` is in scope there). See TechSpec "Data Models" for the exact line formats.
@@ -60,15 +60,15 @@ Modify `DocFormatter.Cli/CliApp.cs` (`WritePhase3BatchSummary` ~lines 651-675, `
 
 ## Tests
 - Unit tests:
-  - [ ] Outcome autoApplied, BrokenNames 0 → only the existing line, no indented lines.
-  - [ ] Outcome confirmed with applied [TVB, QHTP] and pending NHN notFound → line `  credit: applied TVB, QHTP; pending NHN (notFound)`.
-  - [ ] Pending author with unknown term → `pending X (unknown term: Metodology)`.
-  - [ ] Prose → `  credit: free prose (not auto-applied)`.
-  - [ ] headerEmpty → `  credit: header found, body empty`.
-  - [ ] BrokenNames 7 → `  contrib-names: 7 broken surname(s)`.
-  - [ ] Phase 1/2 `WriteBatchSummary` output unchanged (existing tests).
+  - [x] Outcome autoApplied, BrokenNames 0 → only the existing line, no indented lines.
+  - [x] Outcome confirmed with applied [TVB, QHTP] and pending NHN notFound → line `  credit: applied TVB, QHTP; pending NHN (notFound)`.
+  - [x] Pending author with unknown term → `pending X (unknown term: Metodology)`.
+  - [x] Prose → `  credit: free prose (not auto-applied)`.
+  - [x] headerEmpty → `  credit: header found, body empty`.
+  - [x] BrokenNames 7 → `  contrib-names: 7 broken surname(s)`.
+  - [x] Phase 1/2 `WriteBatchSummary` output unchanged (existing tests).
 - Integration tests:
-  - [ ] Batch run over a fixture package with one clean and one pending article → summary has the block only under the pending file.
+  - [x] Batch run over a fixture package with one clean and one pending article → summary has the block only under the pending file.
 - Test coverage target: >=80%
 - All tests must pass
 

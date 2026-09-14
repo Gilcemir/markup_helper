@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: contrib-names verification injector registered before credit-roles
 type: backend
 complexity: medium
@@ -28,10 +28,10 @@ Add a verification-only Phase 3 rule that warns, per contributor, when `<surname
 </requirements>
 
 ## Subtasks
-- [ ] 5.1 Create `ContribNamesInjector` in `DocFormatter.Core/Jats/`.
-- [ ] 5.2 Register it in `AddPhase3Injectors` before `CreditRolesInjector` and update `RuleRegistrationTests` order assertions.
-- [ ] 5.3 Add `ContribNamesInjectorTests` covering the three shapes, the clean case, and XML immutability.
-- [ ] 5.4 Run the full suite, including `Phase3PipelineTests` that enumerate registered injectors.
+- [x] 5.1 Create `ContribNamesInjector` in `DocFormatter.Core/Jats/`.
+- [x] 5.2 Register it in `AddPhase3Injectors` before `CreditRolesInjector` and update `RuleRegistrationTests` order assertions.
+- [x] 5.3 Add `ContribNamesInjectorTests` covering the three shapes, the clean case, and XML immutability.
+- [x] 5.4 Run the full suite, including `Phase3PipelineTests` that enumerate registered injectors.
 
 ## Implementation Details
 New file `DocFormatter.Core/Jats/ContribNamesInjector.cs`; modify `DocFormatter.Core/Pipeline/RuleRegistration.cs` (`AddPhase3Injectors`, lines ~73-83). Use a local ORCID regex (`\d{4}-\d{4}-\d{4}-\d{3}[\dX]`) rather than `FormattingOptions`, which the Jats pipeline does not receive. Iterate `ctx.Xml.Descendants()` with `Name.LocalName == "contrib"` as `CreditRolesInjector` does. See TechSpec "Core Interfaces".
@@ -57,15 +57,15 @@ New file `DocFormatter.Core/Jats/ContribNamesInjector.cs`; modify `DocFormatter.
 
 ## Tests
 - Unit tests:
-  - [ ] `<surname/>` empty → exactly one WARN mentioning "empty".
-  - [ ] `<surname>0009-0008-3948-7334</surname>` → one WARN mentioning ORCID.
-  - [ ] `<surname>3 0000-0003-3513-3391</surname>` → one WARN (digits/ORCID).
-  - [ ] `<surname>Bruzi</surname>` and `<surname>Barboza-Barquero</surname>` → no report entries.
-  - [ ] Article with 7 broken and 1 clean contributor → 7 WARNs.
-  - [ ] Serialized XML before and after `Apply` is identical.
+  - [x] `<surname/>` empty → exactly one WARN mentioning "empty".
+  - [x] `<surname>0009-0008-3948-7334</surname>` → one WARN mentioning ORCID.
+  - [x] `<surname>3 0000-0003-3513-3391</surname>` → one WARN (digits/ORCID).
+  - [x] `<surname>Bruzi</surname>` and `<surname>Barboza-Barquero</surname>` → no report entries.
+  - [x] Article with 7 broken and 1 clean contributor → 7 WARNs.
+  - [x] Serialized XML before and after `Apply` is identical.
 - Integration tests:
-  - [ ] `RuleRegistrationTests`: Phase 3 injector order is OtherId, EditedBy, DataAvailability, ContribNames, CreditRoles.
-  - [ ] Pipeline run over a fixture with one broken surname produces the WARN and still injects CRediT for the resolvable authors.
+  - [x] `RuleRegistrationTests`: Phase 3 injector order is OtherId, EditedBy, DataAvailability, ContribNames, CreditRoles.
+  - [x] Pipeline run over a fixture with one broken surname produces the WARN and still injects CRediT for the resolvable authors.
 - Test coverage target: >=80%
 - All tests must pass
 

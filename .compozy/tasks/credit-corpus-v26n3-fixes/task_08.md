@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Plain-text ORCID token and repeated-token WARN in ExtractAuthorsRule
 type: bugfix
 complexity: medium
@@ -29,11 +29,11 @@ Make Phase 1 extract an ORCID written as plain text in the byline (including glu
 </requirements>
 
 ## Subtasks
-- [ ] 8.1 Add the plain-text ORCID regex and the tokenizer split in `AppendRunTokens` (pass the report into the static method).
-- [ ] 8.2 Add an `AuthorBuilder.Warn` that records a warning without changing confidence; use it for conflicting ORCID and repeated token.
-- [ ] 8.3 Add the repeated-token check in `FlagSuspicions` using diacritics/case folding.
-- [ ] 8.4 Extend `ExtractAuthorsRuleTests` with the byline shapes below, using `AuthorsParagraphFactory`.
-- [ ] 8.5 Run `make test` and `make phase2-verify`.
+- [x] 8.1 Add the plain-text ORCID regex and the tokenizer split in `AppendRunTokens` (pass the report into the static method).
+- [x] 8.2 Add an `AuthorBuilder.Warn` that records a warning without changing confidence; use it for conflicting ORCID and repeated token.
+- [x] 8.3 Add the repeated-token check in `FlagSuspicions` using diacritics/case folding.
+- [x] 8.4 Extend `ExtractAuthorsRuleTests` with the byline shapes below, using `AuthorsParagraphFactory`.
+- [x] 8.5 Run `make test` and `make phase2-verify`.
 
 ## Implementation Details
 Modify `DocFormatter.Core/Rules/ExtractAuthorsRule.cs` (`AppendRunTokens`, `ConsumeTokens` Orcid case, `FlagSuspicions`, `AuthorBuilder`). `FormattingOptions.OrcidIdRegex` (`\b`-anchored) stays for URLs. `RewriteHeaderMvpRule.BuildAuthorParagraph` is unchanged and will now place the ORCID after the label. See TechSpec "Phase 1 (`ExtractAuthorsRule`)" and ADR-006.
@@ -59,16 +59,16 @@ Modify `DocFormatter.Core/Rules/ExtractAuthorsRule.cs` (`AppendRunTokens`, `Cons
 
 ## Tests
 - Unit tests:
-  - [ ] Run "Pablo de Sousa Arantes 0009-0008-3948-7334" + superscript "1" → name "Pablo de Sousa Arantes", OrcidId "0009-0008-3948-7334", label "1", one INFO.
-  - [ ] Run "Adriano Teodoro Bruzi0000-0001-6909-5157" (glued) → name "Adriano Teodoro Bruzi", OrcidId set.
-  - [ ] Run "Ana Silva https://orcid.org/0000-0002-1825-0097" → name "Ana Silva", OrcidId "0000-0002-1825-0097", URL not left in the name.
-  - [ ] Hyperlink ORCID A plus plain-text ORCID B on the same author → OrcidId A kept, one WARN mentioning conflict, confidence High.
-  - [ ] Two authors "Ana Silva 0000-0001-0000-0001, Bruno Costa 0000-0002-0000-0002" → each author gets its own ORCID.
-  - [ ] Name "Nguyen Hoai Nguyen" → one WARN naming the repeated token, confidence High.
-  - [ ] Name "Ana Maria Silva" → no repeated-token WARN.
-  - [ ] Existing 5313/5449 shape tests unchanged.
+  - [x] Run "Pablo de Sousa Arantes 0009-0008-3948-7334" + superscript "1" → name "Pablo de Sousa Arantes", OrcidId "0009-0008-3948-7334", label "1", one INFO.
+  - [x] Run "Adriano Teodoro Bruzi0000-0001-6909-5157" (glued) → name "Adriano Teodoro Bruzi", OrcidId set.
+  - [x] Run "Ana Silva https://orcid.org/0000-0002-1825-0097" → name "Ana Silva", OrcidId "0000-0002-1825-0097", URL not left in the name.
+  - [x] Hyperlink ORCID A plus plain-text ORCID B on the same author → OrcidId A kept, one WARN mentioning conflict, confidence High.
+  - [x] Two authors "Ana Silva 0000-0001-0000-0001, Bruno Costa 0000-0002-0000-0002" → each author gets its own ORCID.
+  - [x] Name "Nguyen Hoai Nguyen" → one WARN naming the repeated token, confidence High.
+  - [x] Name "Ana Maria Silva" → no repeated-token WARN.
+  - [x] Existing 5313/5449 shape tests unchanged.
 - Integration tests:
-  - [ ] `make phase2-verify` reports no diff against `examples/phase-2/after/`.
+  - [x] `make phase2-verify` reports no diff against `examples/phase-2/after/`.
 - Test coverage target: >=80%
 - All tests must pass
 

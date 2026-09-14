@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: CreditOutcome on Phase3Context recorded by CreditRolesInjector, header-empty WARN, integration fixture
 type: backend
 complexity: medium
@@ -31,11 +31,11 @@ Give the CRediT injector a single structured outcome (`CreditOutcome`) written t
 </requirements>
 
 ## Subtasks
-- [ ] 4.1 Add `CreditOutcome`/`CreditEntryOutcome` (new file in `DocFormatter.Core/Jats/`) and `Phase3Context.Credit`.
-- [ ] 4.2 Record the outcome in `CreditRolesInjector.Apply` on every path, deriving entry statuses from `BuildPlan`'s `PlanItem`s.
-- [ ] 4.3 Add the header-empty WARN branch before the prose check.
-- [ ] 4.4 Extend `CreditRolesInjectorTests` for the outcome on each disposition and for the header-empty WARN.
-- [ ] 4.5 Extend the Phase 3 integration fixture and test with the `[p]` + `;` statement.
+- [x] 4.1 Add `CreditOutcome`/`CreditEntryOutcome` (new file in `DocFormatter.Core/Jats/`) and `Phase3Context.Credit`.
+- [x] 4.2 Record the outcome in `CreditRolesInjector.Apply` on every path, deriving entry statuses from `BuildPlan`'s `PlanItem`s.
+- [x] 4.3 Add the header-empty WARN branch before the prose check.
+- [x] 4.4 Extend `CreditRolesInjectorTests` for the outcome on each disposition and for the header-empty WARN.
+- [x] 4.5 Extend the Phase 3 integration fixture and test with the `[p]` + `;` statement.
 
 ## Implementation Details
 Modify `DocFormatter.Core/Jats/CreditRolesInjector.cs` (`Apply`, `BuildPlan` output reuse, `PlanItem` already carries `AuthorKey`, `Contrib`, `Roles`, `WrittenTerms`, `IsClean`), `DocFormatter.Core/Jats/Phase3Context.cs`, new `DocFormatter.Core/Jats/CreditOutcome.cs`. Fixture builders live in `DocFormatter.Tests/Fixtures/Phase3/Phase3DocxFixtureBuilder.cs` (`BuildSectionParagraph`, `WritePhase123HappyPathDocx`). See TechSpec "Core Interfaces" and "Reader" for the header-empty behavior.
@@ -60,20 +60,20 @@ Modify `DocFormatter.Core/Jats/CreditRolesInjector.cs` (`Apply`, `BuildPlan` out
 - `CreditOutcome` records and `Phase3Context.Credit`.
 - Header-empty WARN in `credit-roles`.
 - Integration fixture with `[p]` + `;` statement.
-- Unit tests with 80%+ coverage **(REQUIRED)**
+- Unit tests with 80%+ coverage **(REQUIRED)** — 11 new unit tests (no coverage collector installed; argued by enumeration of every `Apply` exit path)
 - Integration tests for the pipeline fixture **(REQUIRED)**
 
 ## Tests
 - Unit tests:
-  - [ ] Clean statement, all authors resolve → `Credit.Disposition == "autoApplied"`, every entry `Applied == true`, `Resolution == "resolved"`.
-  - [ ] One author NotFound with auto-accept confirmer → `Disposition == "confirmed"`, that entry `Resolution == "notFound"`, `Applied == false`, others applied.
-  - [ ] Confirmer returns Skipped → `Disposition == "skipped"`, no entry applied, entries still listed with statuses.
-  - [ ] Unknown term "Metodology" → entry `UnknownTerms == ["Metodology"]`.
-  - [ ] Prose statement → `Shape == Prose`, `Entries` empty, `Disposition == "prose"`, `Raw` carries the text.
-  - [ ] `CreditStatementRaw` null and `CreditHeaderFound` true → one WARN containing "body is empty", `Disposition == "headerEmpty"`, no INFO "No CREDIT statement".
-  - [ ] `CreditHeaderFound` false → existing INFO, `Disposition == "absent"`.
+  - [x] Clean statement, all authors resolve → `Credit.Disposition == "autoApplied"`, every entry `Applied == true`, `Resolution == "resolved"`.
+  - [x] One author NotFound with auto-accept confirmer → `Disposition == "confirmed"`, that entry `Resolution == "notFound"`, `Applied == false`, others applied.
+  - [x] Confirmer returns Skipped → `Disposition == "skipped"`, no entry applied, entries still listed with statuses.
+  - [x] Unknown term "Metodology" → entry `UnknownTerms == ["Metodology"]`.
+  - [x] Prose statement → `Shape == Prose`, `Entries` empty, `Disposition == "prose"`, `Raw` carries the text.
+  - [x] `CreditStatementRaw` null and `CreditHeaderFound` true → one WARN containing "body is empty", `Disposition == "headerEmpty"`, no INFO "No CREDIT statement".
+  - [x] `CreditHeaderFound` false → existing INFO, `Disposition == "absent"`.
 - Integration tests:
-  - [ ] Pipeline over a docx with `[p]ABC; DEF: Conceptualization; Methodology. GHI: Software.[/p]` and matching contribs → `<role>` injected for all three, report has no WARN.
+  - [x] Pipeline over a docx with `[p]ABC; DEF: Conceptualization; Methodology. GHI: Software.[/p]` and matching contribs → `<role>` injected for all three, report has no WARN.
 - Test coverage target: >=80%
 - All tests must pass
 

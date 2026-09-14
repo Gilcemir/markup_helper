@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: Manual acceptance run over a copy of CBAB v26n3
 type: chore
 complexity: medium
@@ -35,11 +35,11 @@ Run Phase 3 non-interactively over a scratch copy of the v26n3 edition (L01–L0
 </requirements>
 
 ## Subtasks
-- [ ] 9.1 Build the scratch copy in the expected layout.
-- [ ] 9.2 Run Phase 3 for L01, L02, L03.
-- [ ] 9.3 Compare `_batch_summary.txt`, `.report.txt` and `.diagnostic.json` against the acceptance table.
-- [ ] 9.4 Fix deviations in code with regression tests; re-run until the table is met.
-- [ ] 9.5 Note the results (summaries pasted) for the release notes.
+- [x] 9.1 Build the scratch copy in the expected layout.
+- [x] 9.2 Run Phase 3 for L01, L02, L03.
+- [x] 9.3 Compare `_batch_summary.txt`, `.report.txt` and `.diagnostic.json` against the acceptance table.
+- [x] 9.4 Fix deviations in code with regression tests; re-run until the table is met.
+- [x] 9.5 Note the results (summaries pasted) for the release notes.
 
 ## Implementation Details
 No production code is expected to change unless a deviation appears. Pairing: `CliApp.TryResolvePhase3Layout` (upward walk, `scielo_markup/` preference) and `DocumentPairer.Pair` (elocation-id + DOI). Acceptance table: PRD "Phased Rollout Plan — Step 1" and the evidence prompt `PROMPT_credit_roles_v26n3.md`.
@@ -62,12 +62,12 @@ No production code is expected to change unless a deviation appears. Pairing: `C
 
 ## Tests
 - Unit tests:
-  - [ ] Any deviation found gets a unit test reproducing it before the fix.
+  - [x] Any deviation found gets a unit test reproducing it before the fix.
 - Integration tests:
-  - [ ] L01 summary: e55012633, e55242632, e55282635, e55472634 clean; e56132631 pending NHN only, 1 broken surname.
-  - [ ] L02 summary: e55682637, e56422639 clean; e53162636 pending MAF, JAN, AGS, JSP with 7 broken surnames; e55292638 pending TTR; e561726310 pending JGS.
-  - [ ] L03 summary: e541226312, e544126313, e553626311, e565626314 clean; e571926315 pending MRC.
-  - [ ] `grep -l "free prose" */formatted-phase3/*.report.txt` returns nothing.
+  - [x] L01 summary: e55012633, e55242632, e55282635, e55472634 clean; e56132631 pending NHN only, 1 broken surname.
+  - [x] L02 summary: e55682637, e56422639 clean; e53162636 pending MAF, JAN, AGS, JSP with 7 broken surnames; e55292638 pending TTR; e561726310 pending JGS.
+  - [x] L03 summary: e541226312, e544126313, e553626311, e565626314 clean; e571926315 pending MRC.
+  - [x] `grep -l "free prose" */formatted-phase3/*.report.txt` returns nothing.
 - Test coverage target: >=80%
 - All tests must pass
 

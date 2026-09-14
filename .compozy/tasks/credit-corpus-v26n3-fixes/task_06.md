@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: creditStatement block in the Phase 3 diagnostic
 type: backend
 complexity: medium
@@ -30,11 +30,11 @@ Carry the raw CREDIT statement, its recognized shape and each author's resolutio
 </requirements>
 
 ## Subtasks
-- [ ] 6.1 Add the records to `DiagnosticDocument.cs` and the property on `DiagnosticPhase3`.
-- [ ] 6.2 Thread the `CreditOutcome?` parameter through `WritePhase3`/`BuildPhase3Document`/`BuildPhase3` and map it.
-- [ ] 6.3 Pass `ctx.Credit` from `Phase3Processor`.
-- [ ] 6.4 Extend `DiagnosticWriterPhase3Tests` and `DiagnosticDocumentTests` for the new block and JSON naming.
-- [ ] 6.5 Run the full suite.
+- [x] 6.1 Add the records to `DiagnosticDocument.cs` and the property on `DiagnosticPhase3`.
+- [x] 6.2 Thread the `CreditOutcome?` parameter through `WritePhase3`/`BuildPhase3Document`/`BuildPhase3` and map it.
+- [x] 6.3 Pass `ctx.Credit` from `Phase3Processor`.
+- [x] 6.4 Extend `DiagnosticWriterPhase3Tests` and `DiagnosticDocumentTests` for the new block and JSON naming.
+- [x] 6.5 Run the full suite.
 
 ## Implementation Details
 Modify `DocFormatter.Core/Reporting/DiagnosticWriter.cs` (`WritePhase3` ×2, `BuildPhase3Document`, `BuildPhase3`), `DocFormatter.Core/Reporting/DiagnosticDocument.cs` (`DiagnosticPhase3` record ~line 62), `DocFormatter.Cli/Phase3Processor.cs` (call at ~line 180). Map `CreditShape` to its enum name string. See TechSpec "Data Models".
@@ -60,13 +60,13 @@ Modify `DocFormatter.Core/Reporting/DiagnosticWriter.cs` (`WritePhase3` ×2, `Bu
 
 ## Tests
 - Unit tests:
-  - [ ] Outcome with 2 entries (one resolved/applied, one notFound) and a WARN in the report → JSON contains `"creditStatement"` with `"raw"`, `"shape": "authorKeyed"`, two entries with `"resolution": "resolved"`/`"notFound"` and `"applied": true/false`.
-  - [ ] Prose outcome → `"shape": "prose"`, `"entries": []`, raw present.
-  - [ ] `credit == null` → `"creditStatement": null` and the four tag blocks unchanged.
-  - [ ] Report with only INFO → `WritePhase3` returns false and writes nothing (gate preserved), even with an outcome.
-  - [ ] `DiagnosticDocumentTests` round-trip includes the new property.
+  - [x] Outcome with 2 entries (one resolved/applied, one notFound) and a WARN in the report → JSON contains `"creditStatement"` with `"raw"`, `"shape": "authorKeyed"`, two entries with `"resolution": "resolved"`/`"notFound"` and `"applied": true/false`.
+  - [x] Prose outcome → `"shape": "prose"`, `"entries": []`, raw present.
+  - [x] `credit == null` → `"creditStatement": null` and the four tag blocks unchanged.
+  - [x] Report with only INFO → `WritePhase3` returns false and writes nothing (gate preserved), even with an outcome.
+  - [x] `DiagnosticDocumentTests` round-trip includes the new property.
 - Integration tests:
-  - [ ] `CliPhase3Tests`: single-file run over a fixture with an unresolved author produces a `.diagnostic.json` whose `phase3.creditStatement.entries` names that author as `notFound`.
+  - [x] `CliPhase3Tests`: single-file run over a fixture with an unresolved author produces a `.diagnostic.json` whose `phase3.creditStatement.entries` names that author as `notFound`.
 - Test coverage target: >=80%
 - All tests must pass
 

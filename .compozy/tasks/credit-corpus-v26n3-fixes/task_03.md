@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 title: DocxSourceReader ignores `[p]`/`[/p]` in trailing sections and exposes CreditHeaderFound
 type: bugfix
 complexity: low
@@ -28,10 +28,10 @@ Stop `ExtractSection` from ending a section at a `[p]…[/p]` body paragraph, an
 </requirements>
 
 ## Subtasks
-- [ ] 3.1 Add the `[p]`/`[/p]` strip step to `ExtractSection`.
-- [ ] 3.2 Add `CreditHeaderFound` to `DocxSource` and set it in `Parse`.
-- [ ] 3.3 Add reader tests for the `[p]` body, the `[refs]`/`[ack]` terminators, and the header-with-empty-body case.
-- [ ] 3.4 Run the full suite.
+- [x] 3.1 Add the `[p]`/`[/p]` strip step to `ExtractSection`.
+- [x] 3.2 Add `CreditHeaderFound` to `DocxSource` and set it in `Parse`.
+- [x] 3.3 Add reader tests for the `[p]` body, the `[refs]`/`[ack]` terminators, and the header-with-empty-body case.
+- [x] 3.4 Run the full suite.
 
 ## Implementation Details
 Modify `DocFormatter.Core/Jats/DocxSourceReader.cs` (`ExtractSection`, `Parse`) and `DocFormatter.Core/Jats/DocxSource.cs`. Tests use the public `DocxSourceReader.Parse(IReadOnlyList<string>)` overload with paragraph lists, no real docx needed. See TechSpec "Reader (`ExtractSection`)".
@@ -57,15 +57,15 @@ Modify `DocFormatter.Core/Jats/DocxSourceReader.cs` (`ExtractSection`, `Parse`) 
 
 ## Tests
 - Unit tests:
-  - [ ] Paragraphs ["CREDIT STATEMENT", "[p]GHZ; IRC: Conceptualization.[/p]", "[refs][sectitle]REFERENCES[/sectitle]"] → `CreditStatementRaw` = "GHZ; IRC: Conceptualization." and `CreditHeaderFound` = true.
-  - [ ] Paragraphs ["CREDIT STATEMENT", "X: Methodology.", "[refs]..."] → raw stops before `[refs]`.
-  - [ ] Paragraphs ["CREDIT STATEMENT", "X: Methodology.", "[ack][sectitle]ACKNOWLEDGEMENTS[/sectitle]"] → raw stops before `[ack]`.
-  - [ ] Paragraphs ["CREDIT STATEMENT", "[refs]..."] → raw null, `CreditHeaderFound` true.
-  - [ ] Paragraphs without the header → raw null, `CreditHeaderFound` false.
-  - [ ] DATA AVAILABILITY body tagged `[p]…[/p]` is also extracted.
-  - [ ] Mixed case `[P]…[/P]` is stripped.
+  - [x] Paragraphs ["CREDIT STATEMENT", "[p]GHZ; IRC: Conceptualization.[/p]", "[refs][sectitle]REFERENCES[/sectitle]"] → `CreditStatementRaw` = "GHZ; IRC: Conceptualization." and `CreditHeaderFound` = true.
+  - [x] Paragraphs ["CREDIT STATEMENT", "X: Methodology.", "[refs]..."] → raw stops before `[refs]`.
+  - [x] Paragraphs ["CREDIT STATEMENT", "X: Methodology.", "[ack][sectitle]ACKNOWLEDGEMENTS[/sectitle]"] → raw stops before `[ack]`.
+  - [x] Paragraphs ["CREDIT STATEMENT", "[refs]..."] → raw null, `CreditHeaderFound` true.
+  - [x] Paragraphs without the header → raw null, `CreditHeaderFound` false.
+  - [x] DATA AVAILABILITY body tagged `[p]…[/p]` is also extracted.
+  - [x] Mixed case `[P]…[/P]` is stripped.
 - Integration tests:
-  - [ ] `DocumentPairerTests` and `Phase3PipelineIntegrationTests` pass unchanged.
+  - [x] `DocumentPairerTests` and `Phase3PipelineIntegrationTests` pass unchanged.
 - Test coverage target: >=80%
 - All tests must pass
 
