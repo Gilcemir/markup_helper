@@ -31,7 +31,10 @@ public sealed partial class ContribNamesInjector : IJatsInjector
     private const string SurnameName = "surname";
 
     /// <inheritdoc />
-    public string Name => "contrib-names";
+    /// <summary>The report label of this rule; the batch summary counts its WARN entries by it.</summary>
+    public const string RuleName = "contrib-names";
+
+    public string Name => RuleName;
 
     /// <inheritdoc />
     public RuleSeverity Severity => RuleSeverity.Optional;

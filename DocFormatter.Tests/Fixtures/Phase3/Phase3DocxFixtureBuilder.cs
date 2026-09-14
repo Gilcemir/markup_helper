@@ -49,14 +49,34 @@ internal static class Phase3DocxFixtureBuilder
     /// tag that ends the trailing sections.
     /// </summary>
     public static void WriteMarkupDocxWithCreditStatement(string path, string creditParagraphText)
+        => WriteMarkupDocxWithCreditStatement(path, creditParagraphText, MarkupElocationId, MarkupDoi);
+
+    public const string MarkupElocationId = "e56132631";
+
+    /// <summary>
+    /// Same as <see cref="WriteMarkupDocxWithCreditStatement(string, string)"/> with
+    /// explicit pairing keys, so a test can stage several distinct articles in one
+    /// package (ADR-004 pairing rejects two docx with the same elocation id).
+    /// </summary>
+    public static void WriteMarkupDocxWithCreditStatement(
+        string path,
+        string creditParagraphText,
+        string elocationId,
+        string doi)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(creditParagraphText);
+        ArgumentException.ThrowIfNullOrEmpty(elocationId);
+        ArgumentException.ThrowIfNullOrEmpty(doi);
+
+        var header = MarkupDocHeaderText
+            .Replace($"elocatid=\"{MarkupElocationId}\"", $"elocatid=\"{elocationId}\"", StringComparison.Ordinal)
+            .Replace($"[doi]{MarkupDoi}[/doi]", $"[doi]{doi}[/doi]", StringComparison.Ordinal);
 
         using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
         var mainPart = doc.AddMainDocumentPart();
         mainPart.Document = new Document(new Body(
-            BuildParagraph(MarkupDocHeaderText),
+            BuildParagraph(header),
             BuildSectionParagraph(CreditStatementHeaderText),
             BuildParagraph(creditParagraphText),
             BuildParagraph(ReferencesTagText)));

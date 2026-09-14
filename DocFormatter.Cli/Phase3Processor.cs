@@ -18,11 +18,20 @@ internal enum Phase3OutcomeKind
     Failed,
 }
 
+/// <summary>
+/// One document's batch result. <paramref name="Credit"/> is the
+/// <see cref="CreditOutcome"/> <c>credit-roles</c> recorded (null when the
+/// pipeline did not complete) and <paramref name="BrokenNames"/> the number of
+/// <c>contrib-names</c> WARN entries; both feed the batch summary's per-article
+/// pendency block (credit-corpus-v26n3-fixes ADR-002/ADR-005).
+/// </summary>
 internal sealed record Phase3Outcome(
     string FileName,
     Phase3OutcomeKind Kind,
     bool Prompted,
-    string? Reason);
+    string? Reason,
+    CreditOutcome? Credit = null,
+    int BrokenNames = 0);
 
 /// <summary>
 /// Records every <see cref="ConfirmDisposition"/> taken through an inner
@@ -195,6 +204,13 @@ internal sealed class Phase3Processor
             _logger.Information("✓ {File}", name);
         }
 
-        return new Phase3Outcome(name, Phase3OutcomeKind.Processed, recording.Prompted, null);
+        // Broken bylines are not stored on the context by design (ADR-002): the
+        // count is read back from the rule's WARN entries.
+        var brokenNames = report.Entries.Count(e =>
+            string.Equals(e.Rule, ContribNamesInjector.RuleName, StringComparison.Ordinal)
+            && e.Level == ReportLevel.Warn);
+
+        return new Phase3Outcome(
+            name, Phase3OutcomeKind.Processed, recording.Prompted, null, ctx.Credit, brokenNames);
     }
 }

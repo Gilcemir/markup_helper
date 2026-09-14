@@ -648,7 +648,7 @@ internal static class CliApp
         return false;
     }
 
-    private static void WritePhase3BatchSummary(string path, IReadOnlyList<Phase3Outcome> outcomes)
+    internal static void WritePhase3BatchSummary(string path, IReadOnlyList<Phase3Outcome> outcomes)
     {
         var processed = outcomes.Count(o => o.Kind == Phase3OutcomeKind.Processed);
         var prompted = outcomes.Count(o => o.Prompted);
@@ -669,9 +669,79 @@ internal static class CliApp
                 _ => $"✗ {o.Reason}",
             };
             lines.Add($"{o.FileName}.xml {marker}");
+            lines.AddRange(Phase3PendencyLines(o));
         }
 
         File.WriteAllLines(path, lines);
+    }
+
+    // The per-article pendency block (credit-corpus-v26n3-fixes, PRD "Diagnostic
+    // and batch summary"): indented lines under a processed file whose CRediT did
+    // not fully auto-apply or whose bylines are broken, so the operator closes an
+    // edition from this one file. Clean articles keep their single line.
+    internal static IReadOnlyList<string> Phase3PendencyLines(Phase3Outcome outcome)
+    {
+        if (outcome.Kind != Phase3OutcomeKind.Processed)
+        {
+            return Array.Empty<string>();
+        }
+
+        var lines = new List<string>(2);
+        var credit = outcome.Credit;
+        if (credit is not null && !string.Equals(credit.Disposition, CreditDisposition.AutoApplied, StringComparison.Ordinal))
+        {
+            lines.Add("  credit: " + DescribeCreditPendency(credit));
+        }
+
+        if (outcome.BrokenNames > 0)
+        {
+            lines.Add($"  contrib-names: {outcome.BrokenNames} broken surname(s)");
+        }
+
+        return lines;
+    }
+
+    private static string DescribeCreditPendency(CreditOutcome credit)
+    {
+        switch (credit.Disposition)
+        {
+            case CreditDisposition.Prose:
+                return "free prose (not auto-applied)";
+            case CreditDisposition.HeaderEmpty:
+                return "header found, body empty";
+            case CreditDisposition.Absent:
+                return "no CREDIT STATEMENT on the docx";
+        }
+
+        var applied = credit.Entries.Where(e => e.Applied).Select(e => e.AuthorKey).ToList();
+        var pending = credit.Entries
+            .Where(e => !e.Applied)
+            .Select(e => $"{e.AuthorKey} ({DescribePendingReason(e, credit.Disposition)})")
+            .ToList();
+
+        var appliedText = applied.Count == 0 ? "applied none" : "applied " + string.Join(", ", applied);
+        return pending.Count == 0
+            ? appliedText
+            : appliedText + "; pending " + string.Join(", ", pending);
+    }
+
+    // Why an author entry was not written: its resolution when it did not resolve,
+    // its unknown terms when any, else the document disposition that withheld it
+    // (e.g. the operator skipped a document whose authors all resolved).
+    private static string DescribePendingReason(CreditEntryOutcome entry, string disposition)
+    {
+        var parts = new List<string>(2);
+        if (!string.Equals(entry.Resolution, CreditResolution.Resolved, StringComparison.Ordinal))
+        {
+            parts.Add(entry.Resolution);
+        }
+
+        if (entry.UnknownTerms.Count > 0)
+        {
+            parts.Add("unknown term: " + string.Join(", ", entry.UnknownTerms));
+        }
+
+        return parts.Count == 0 ? disposition : string.Join("; ", parts);
     }
 
     internal static bool IsTransientArtifact(string fileName)
