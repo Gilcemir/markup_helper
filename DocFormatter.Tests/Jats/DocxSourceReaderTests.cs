@@ -230,6 +230,112 @@ public sealed class DocxSourceReaderTests
         Assert.Null(source.CreditStatementRaw);
     }
 
+    // ----- [p]-tagged bodies and CreditHeaderFound (ADR-003, INV-02) -----
+
+    [Fact]
+    public void Parse_CreditStatement_ParagraphTaggedBody_IsExtracted()
+    {
+        // 5536 shape: the CREDIT body paragraph carries [p]…[/p] tags, which
+        // used to be mistaken for a section terminator.
+        var source = DocxSourceReader.Parse(new[]
+        {
+            Header,
+            "CREDIT STATEMENT",
+            "[p]GHZ; IRC: Conceptualization.[/p]",
+            "[refs][sectitle]REFERENCES[/sectitle]",
+        });
+
+        Assert.Equal("GHZ; IRC: Conceptualization.", source.CreditStatementRaw);
+        Assert.True(source.CreditHeaderFound);
+    }
+
+    [Fact]
+    public void Parse_CreditStatement_MixedCaseParagraphTags_AreStripped()
+    {
+        var source = DocxSourceReader.Parse(new[]
+        {
+            Header,
+            "CREDIT STATEMENT",
+            "[P]X: Methodology.[/P]",
+            "[refs]",
+        });
+
+        Assert.Equal("X: Methodology.", source.CreditStatementRaw);
+    }
+
+    [Fact]
+    public void Parse_CreditStatement_StopsBeforeRefs()
+    {
+        var source = DocxSourceReader.Parse(new[]
+        {
+            Header,
+            "CREDIT STATEMENT",
+            "X: Methodology.",
+            "[refs][sectitle]REFERENCES[/sectitle]",
+            "[ref id=\"r1\"]x[/ref]",
+        });
+
+        Assert.Equal("X: Methodology.", source.CreditStatementRaw);
+    }
+
+    [Fact]
+    public void Parse_CreditStatement_StopsBeforeAck()
+    {
+        var source = DocxSourceReader.Parse(new[]
+        {
+            Header,
+            "CREDIT STATEMENT",
+            "X: Methodology.",
+            "[ack][sectitle]ACKNOWLEDGEMENTS[/sectitle]",
+            "We thank everyone.",
+        });
+
+        Assert.Equal("X: Methodology.", source.CreditStatementRaw);
+    }
+
+    [Fact]
+    public void Parse_CreditHeaderWithEmptyBody_RawNull_HeaderFound()
+    {
+        var source = DocxSourceReader.Parse(new[]
+        {
+            Header,
+            "CREDIT STATEMENT",
+            "[refs][sectitle]REFERENCES[/sectitle]",
+        });
+
+        Assert.Null(source.CreditStatementRaw);
+        Assert.True(source.CreditHeaderFound);
+    }
+
+    [Fact]
+    public void Parse_NoCreditHeader_HeaderNotFound()
+    {
+        var source = DocxSourceReader.Parse(new[]
+        {
+            Header,
+            "DATA AVAILABILITY",
+            "Data available on request.",
+            "[refs]",
+        });
+
+        Assert.Null(source.CreditStatementRaw);
+        Assert.False(source.CreditHeaderFound);
+    }
+
+    [Fact]
+    public void Parse_DataAvailability_ParagraphTaggedBody_IsExtracted()
+    {
+        var source = DocxSourceReader.Parse(new[]
+        {
+            Header,
+            "DATA AVAILABILITY",
+            "[p]Data available on request.[/p]",
+            "[refs]",
+        });
+
+        Assert.Equal("Data available on request.", source.DataAvailabilityText);
+    }
+
     // ----- Integration tests over the real corpus docx -----
 
     [Fact]
