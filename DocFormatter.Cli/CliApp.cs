@@ -856,8 +856,10 @@ internal static class CliApp
                        <after-dir>/<same-name>.docx, scoped to Phase2Scope.Current. Prints
                        [PASS] <id> or [FAIL] <id> with first-divergence context.
 
-        phase3:        injects the four JATS tags into each XML; outputs go to <dir>/formatted-phase3/
-                       (modified .xml, .report.txt, .diagnostic.json) plus _batch_summary.txt for a folder.
+        phase3:        injects the four JATS tags into each XML and warns on broken <surname> elements
+                       (contrib-names); outputs go to <dir>/formatted-phase3/ (modified .xml, .report.txt,
+                       .diagnostic.json with phase3.creditStatement) plus _batch_summary.txt for a folder,
+                       which lists CRediT pendencies and broken surnames under each affected article.
                        Pairs each XML with its docx and other.txt by walking up to the directory holding
                        other.txt (its scielo_markup/ holds the docx). --non-interactive=accept writes
                        best-guess proposals; =fail aborts on any prompt; absent prompts interactively.
