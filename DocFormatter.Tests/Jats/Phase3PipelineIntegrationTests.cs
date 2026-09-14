@@ -182,6 +182,61 @@ public sealed class Phase3PipelineIntegrationTests : IDisposable
         });
     }
 
+    [Fact]
+    public void Run_RegisteredInjectors_OneBrokenSurname_WarnsAndStillInjectsCredit()
+    {
+        // ADR-002: a <surname> holding an ORCID is reported by contrib-names, but
+        // credit-roles still resolves "GHI" through the given-names tier
+        // (ADR-004) and injects its roles — the byline fix and the CRediT mapping
+        // are independent pendencies.
+        var docxPath = Path.Combine(_tempDir, "5316.docx");
+        Phase3DocxFixtureBuilder.WriteMarkupDocxWithCreditStatement(
+            docxPath,
+            Phase3DocxFixtureBuilder.ParagraphTaggedSemicolonCreditText);
+        var source = new DocxSourceReader().Read(docxPath);
+
+        var xml = ArticleWithDoiAndContribs(
+            Contrib("Costa", "Ana Beatriz"),
+            Contrib("Ferreira", "Daniel Eduardo"),
+            Contrib("0009-0008-3948-7334", "Gabriel Henrique Iglesias"));
+        var ctx = new Phase3Context
+        {
+            Source = source,
+            Xml = xml,
+            OtherNumber = "00301",
+            Confirm = new ThrowingConfirmer(),
+        };
+        var report = new Report();
+
+        using var provider = new ServiceCollection().AddPhase3Injectors().BuildServiceProvider();
+        new Phase3Pipeline(provider.GetServices<IJatsInjector>()).Run(ctx, report);
+
+        // contrib-names: exactly one WARN, naming the third contributor and the ORCID.
+        var broken = Assert.Single(report.Entries, e => e.Rule == "contrib-names");
+        Assert.Equal(ReportLevel.Warn, broken.Level);
+        Assert.Contains("#3", broken.Message, StringComparison.Ordinal);
+        Assert.Contains("0009-0008-3948-7334", broken.Message, StringComparison.Ordinal);
+
+        // contrib-names runs before credit-roles.
+        var rules = report.Entries.Select(e => e.Rule).ToList();
+        Assert.True(rules.IndexOf("contrib-names") < rules.IndexOf("credit-roles"));
+
+        // credit-roles: not blocked — every contributor, including the broken one,
+        // received its roles without a prompt, and nothing else warned.
+        Assert.Equal(
+            new[] { "Conceptualization", "Methodology" },
+            RolesOf(xml, "Costa").Select(r => r.Value));
+        Assert.Equal(
+            new[] { "Conceptualization", "Methodology" },
+            RolesOf(xml, "Ferreira").Select(r => r.Value));
+        Assert.Equal(new[] { "Software" }, RolesOf(xml, "0009-0008-3948-7334").Select(r => r.Value));
+        Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn && e.Rule != "contrib-names");
+
+        Assert.NotNull(ctx.Credit);
+        Assert.Equal(CreditDisposition.AutoApplied, ctx.Credit!.Disposition);
+        Assert.All(ctx.Credit.Entries, e => Assert.True(e.Applied));
+    }
+
     private static string Contrib(string surname, string givenNames)
         => "\t\t\t\t<contrib contrib-type=\"author\">\n" +
            "\t\t\t\t\t<name>\n" +

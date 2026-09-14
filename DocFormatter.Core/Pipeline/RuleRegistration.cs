@@ -61,13 +61,17 @@ public static class RuleRegistration
     }
 
     /// <summary>
-    /// Registers the four Phase 3 <see cref="IJatsInjector"/>s in their canonical
+    /// Registers the five Phase 3 <see cref="IJatsInjector"/>s in their canonical
     /// run order (ADR-003), mirroring <see cref="AddPhase2Rules"/>. The order is
     /// load-bearing: the <c>other</c>-id (Critical) runs first so a missing DOI or
-    /// <c>other</c> number aborts the document before the three Optional injectors
-    /// do any work, and the remaining three follow the document's natural
+    /// <c>other</c> number aborts the document before the four Optional injectors
+    /// do any work, and the remaining four follow the document's natural
     /// front-to-back metadata order (author-notes → back/data-availability →
-    /// contrib/credit). <see cref="Phase3Pipeline"/> consumes them via
+    /// contrib names → contrib/credit). The verification-only
+    /// <see cref="ContribNamesInjector"/> sits immediately before
+    /// <see cref="CreditRolesInjector"/> so a broken <c>&lt;surname&gt;</c> is
+    /// reported ahead of the CRediT pendency it may cause, without blocking it
+    /// (ADR-002). <see cref="Phase3Pipeline"/> consumes them via
     /// <see cref="IEnumerable{T}"/> in registration order.
     /// </summary>
     public static IServiceCollection AddPhase3Injectors(this IServiceCollection services)
@@ -77,6 +81,7 @@ public static class RuleRegistration
         services.AddTransient<IJatsInjector, OtherIdInjector>();
         services.AddTransient<IJatsInjector, EditedByInjector>();
         services.AddTransient<IJatsInjector, DataAvailabilityInjector>();
+        services.AddTransient<IJatsInjector, ContribNamesInjector>();
         services.AddTransient<IJatsInjector, CreditRolesInjector>();
 
         return services;
