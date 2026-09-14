@@ -85,13 +85,19 @@ public static class DiagnosticWriter
     /// confirmer gate, keyed by injector name; tags absent here did not prompt and
     /// their disposition is inferred from the report.
     /// </param>
+    /// <param name="credit">
+    /// The <see cref="CreditOutcome"/> <c>credit-roles</c> recorded on the
+    /// <see cref="Phase3Context"/>, surfaced as <c>phase3.creditStatement</c>;
+    /// <see langword="null"/> when the injector did not run.
+    /// </param>
     public static bool WritePhase3(
         string filePath,
         string sourceFileName,
         XDocument xml,
         IReport report,
-        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions)
-        => WritePhase3(filePath, sourceFileName, xml, report, recordedDispositions, DateTime.UtcNow);
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions,
+        CreditOutcome? credit)
+        => WritePhase3(filePath, sourceFileName, xml, report, recordedDispositions, credit, DateTime.UtcNow);
 
     public static bool WritePhase3(
         string filePath,
@@ -99,6 +105,7 @@ public static class DiagnosticWriter
         XDocument xml,
         IReport report,
         IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions,
+        CreditOutcome? credit,
         DateTime extractedAt)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
@@ -118,7 +125,7 @@ public static class DiagnosticWriter
             Directory.CreateDirectory(directory);
         }
 
-        var document = BuildPhase3Document(sourceFileName, xml, report, recordedDispositions, extractedAt);
+        var document = BuildPhase3Document(sourceFileName, xml, report, recordedDispositions, credit, extractedAt);
         var json = JsonSerializer.Serialize(document, SerializerOptions);
         File.WriteAllText(filePath, json);
         return true;
@@ -127,13 +134,15 @@ public static class DiagnosticWriter
     /// <summary>
     /// Builds the Phase 3 diagnostic document: the standard envelope (status,
     /// issues, and the article's DOI/elocation read straight from the injected
-    /// XML) plus the four-tag <see cref="DiagnosticPhase3"/> section.
+    /// XML) plus the four-tag <see cref="DiagnosticPhase3"/> section and the
+    /// CREDIT statement block built from <paramref name="credit"/>.
     /// </summary>
     public static DiagnosticDocument BuildPhase3Document(
         string sourceFileName,
         XDocument xml,
         IReport report,
         IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions,
+        CreditOutcome? credit,
         DateTime extractedAt)
     {
         ArgumentException.ThrowIfNullOrEmpty(sourceFileName);
@@ -149,7 +158,7 @@ public static class DiagnosticWriter
             Formatting: null,
             Issues: BuildIssues(report),
             Phase2: null,
-            Phase3: BuildPhase3(xml, report, recordedDispositions));
+            Phase3: BuildPhase3(xml, report, recordedDispositions, credit));
     }
 
     private static DiagnosticFields BuildPhase3Fields(XDocument xml)
@@ -182,14 +191,35 @@ public static class DiagnosticWriter
     private static DiagnosticPhase3 BuildPhase3(
         XDocument xml,
         IReport report,
-        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions)
+        IReadOnlyDictionary<string, ConfirmDisposition> recordedDispositions,
+        CreditOutcome? credit)
     {
         return new DiagnosticPhase3(
             OtherId: BuildPhase3Tag(OtherIdTag, ReadOtherIdValue(xml), report, recordedDispositions),
             EditedBy: BuildPhase3Tag(EditedByTag, ReadEditedByValue(xml), report, recordedDispositions),
             DataAvailability: BuildPhase3Tag(
                 DataAvailabilityTag, ReadDataAvailabilityValue(xml), report, recordedDispositions),
-            CreditRoles: BuildPhase3Tag(CreditRolesTag, ReadCreditRolesValue(xml), report, recordedDispositions));
+            CreditRoles: BuildPhase3Tag(CreditRolesTag, ReadCreditRolesValue(xml), report, recordedDispositions),
+            CreditStatement: BuildCreditStatement(credit));
+    }
+
+    // The statement block mirrors the injector's CreditOutcome one-to-one (ADR-005
+    // of credit-corpus-v26n3-fixes): no reparse, no re-resolution, so the report,
+    // the diagnostic and the batch summary agree by construction. The shape is
+    // the camelCase CreditShape name, matching the disposition vocabulary style.
+    private static DiagnosticCreditStatement? BuildCreditStatement(CreditOutcome? credit)
+    {
+        if (credit is null)
+        {
+            return null;
+        }
+
+        return new DiagnosticCreditStatement(
+            Raw: credit.Raw,
+            Shape: ToCamelCase(credit.Shape.ToString()),
+            Entries: credit.Entries
+                .Select(e => new DiagnosticCreditEntry(e.AuthorKey, e.Terms, e.Resolution, e.UnknownTerms, e.Applied))
+                .ToList());
     }
 
     private static DiagnosticPhase3Tag BuildPhase3Tag(

@@ -226,4 +226,32 @@ public sealed class DiagnosticDocumentTests
         Assert.Equal(3, roundtripped.Formatting.HistoryMove!.ParagraphsMoved);
         Assert.Equal(7, roundtripped.Formatting.SectionPromotion!.SectionsPromoted);
     }
+
+    [Fact]
+    public void DiagnosticPhase3_WithCreditStatement_RoundTripsUnderCamelCaseKeys()
+    {
+        var tag = new DiagnosticPhase3Tag("other-id", "00201", "autoApplied");
+        var phase3 = new DiagnosticPhase3(
+            OtherId: tag,
+            EditedBy: tag with { Tag = "edited-by", Value = null, Disposition = "absent" },
+            DataAvailability: tag with { Tag = "data-availability" },
+            CreditRoles: tag with { Tag = "credit-roles", Value = "2" },
+            CreditStatement: new DiagnosticCreditStatement(
+                Raw: "TVB: Data curation; NHN: Conceptualization.",
+                Shape: "authorKeyed",
+                Entries: new[]
+                {
+                    new DiagnosticCreditEntry("TVB", new[] { "Data curation" }, "resolved", Array.Empty<string>(), true),
+                    new DiagnosticCreditEntry("NHN", new[] { "Conceptualization" }, "notFound", Array.Empty<string>(), false),
+                }));
+
+        var json = JsonSerializer.Serialize(phase3, DiagnosticWriter.JsonOptions);
+        var roundtripped = JsonSerializer.Deserialize<DiagnosticPhase3>(json, DiagnosticWriter.JsonOptions);
+
+        Assert.Contains("\"creditStatement\":", json);
+        Assert.Contains("\"authorKey\": \"TVB\"", json);
+        Assert.Contains("\"unknownTerms\": []", json);
+        Assert.NotNull(roundtripped);
+        Assert.Equal(phase3, roundtripped);
+    }
 }

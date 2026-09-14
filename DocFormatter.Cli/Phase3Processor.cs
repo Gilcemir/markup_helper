@@ -177,7 +177,8 @@ internal sealed class Phase3Processor
         // disk. The error lives in the .report.txt instead.
         if (failReason is null)
         {
-            DiagnosticWriter.WritePhase3(diagnosticPath, sourceFileName, jdoc.Document, report, recording.Dispositions);
+            DiagnosticWriter.WritePhase3(
+                diagnosticPath, sourceFileName, jdoc.Document, report, recording.Dispositions, ctx.Credit);
         }
 
         if (failReason is not null)

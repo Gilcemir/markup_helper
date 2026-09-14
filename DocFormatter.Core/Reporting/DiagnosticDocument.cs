@@ -57,13 +57,115 @@ public sealed record DiagnosticDocument(
 /// The Phase 3 (JATS tag-injection) diagnostic section: one entry per injected
 /// tag carrying the value that reached the XML and the disposition that produced
 /// it (TechSpec "Monitoring and Observability"). The four tags appear in the
-/// injector run order (ADR-003).
+/// injector run order (ADR-003); <see cref="CreditStatement"/> carries the
+/// CREDIT statement text and per-author resolution when <c>credit-roles</c>
+/// recorded an outcome.
 /// </summary>
 public sealed record DiagnosticPhase3(
     DiagnosticPhase3Tag OtherId,
     DiagnosticPhase3Tag EditedBy,
     DiagnosticPhase3Tag DataAvailability,
-    DiagnosticPhase3Tag CreditRoles);
+    DiagnosticPhase3Tag CreditRoles,
+    DiagnosticCreditStatement? CreditStatement = null);
+
+/// <summary>
+/// The CREDIT statement as <c>credit-roles</c> saw it (credit-corpus-v26n3-fixes
+/// ADR-005): the <paramref name="Raw"/> body read from the docx, the camelCase
+/// <see cref="DocFormatter.Core.Jats.CreditShape"/> name the parser recognized,
+/// and one <see cref="DiagnosticCreditEntry"/> per parsed author entry (empty
+/// for prose, header-empty and absent statements). <see langword="null"/> on
+/// <see cref="DiagnosticPhase3.CreditStatement"/> when the injector recorded no
+/// outcome. Lets the operator diagnose a pending article without reopening the
+/// docx.
+/// </summary>
+public sealed record DiagnosticCreditStatement(
+    string? Raw,
+    string Shape,
+    IReadOnlyList<DiagnosticCreditEntry> Entries)
+{
+    public bool Equals(DiagnosticCreditStatement? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return string.Equals(Raw, other.Raw, StringComparison.Ordinal)
+            && string.Equals(Shape, other.Shape, StringComparison.Ordinal)
+            && Entries.SequenceEqual(other.Entries);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Raw, StringComparer.Ordinal);
+        hash.Add(Shape, StringComparer.Ordinal);
+        foreach (var entry in Entries)
+        {
+            hash.Add(entry);
+        }
+
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>
+/// One author entry of a <see cref="DiagnosticCreditStatement"/>: the key as
+/// written, the written role <paramref name="Terms"/>, how the key resolved
+/// against the XML contributors (<c>resolved</c>/<c>notFound</c>/<c>ambiguous</c>),
+/// the terms that did not map to a CRediT role, and whether this run wrote
+/// <c>&lt;role&gt;</c> elements for the contributor.
+/// </summary>
+public sealed record DiagnosticCreditEntry(
+    string AuthorKey,
+    IReadOnlyList<string> Terms,
+    string Resolution,
+    IReadOnlyList<string> UnknownTerms,
+    bool Applied)
+{
+    public bool Equals(DiagnosticCreditEntry? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return string.Equals(AuthorKey, other.AuthorKey, StringComparison.Ordinal)
+            && string.Equals(Resolution, other.Resolution, StringComparison.Ordinal)
+            && Applied == other.Applied
+            && Terms.SequenceEqual(other.Terms, StringComparer.Ordinal)
+            && UnknownTerms.SequenceEqual(other.UnknownTerms, StringComparer.Ordinal);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(AuthorKey, StringComparer.Ordinal);
+        hash.Add(Resolution, StringComparer.Ordinal);
+        hash.Add(Applied);
+        foreach (var term in Terms)
+        {
+            hash.Add(term, StringComparer.Ordinal);
+        }
+
+        foreach (var term in UnknownTerms)
+        {
+            hash.Add(term, StringComparer.Ordinal);
+        }
+
+        return hash.ToHashCode();
+    }
+}
 
 /// <summary>
 /// A single Phase 3 tag outcome: the injector <paramref name="Tag"/> label, the

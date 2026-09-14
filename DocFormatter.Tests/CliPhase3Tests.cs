@@ -239,6 +239,64 @@ public sealed class CliPhase3Tests : IDisposable
         Assert.True(File.Exists(reportPath));
     }
 
+    [Fact]
+    public void Run_Phase3_SingleFile_UnresolvedAuthor_DiagnosticNamesTheAuthorAsNotFound()
+    {
+        // credit-corpus-v26n3-fixes ADR-005: the diagnostic carries the statement
+        // as read and each author's resolution, so a pending article is diagnosed
+        // without reopening the docx. "XYZ" matches no contributor → gated →
+        // WARN → diagnostic written with XYZ as notFound and ABC as resolved.
+        var root = Path.Combine(_tempDir, $"synthetic-{Guid.NewGuid():N}");
+        var markupDir = Path.Combine(root, "scielo_markup");
+        var packageDir = Path.Combine(root, "scielo_package");
+        Directory.CreateDirectory(markupDir);
+        Directory.CreateDirectory(packageDir);
+
+        const string xmlName = "1984-7033-cbab-26-03-e56132631.xml";
+        File.WriteAllText(Path.Combine(root, "other.txt"), "1984-7033-cbab-26-03-e56132631.pdf\t00301\n");
+        Fixtures.Phase3.Phase3DocxFixtureBuilder.WriteMarkupDocxWithCreditStatement(
+            Path.Combine(markupDir, "5613.docx"),
+            "ABC: Conceptualization; Methodology. XYZ: Software.");
+        File.WriteAllText(
+            Path.Combine(packageDir, xmlName),
+            "<article>\n" +
+            "\t<front>\n" +
+            "\t\t<article-meta>\n" +
+            $"\t\t\t<article-id pub-id-type=\"doi\">{Fixtures.Phase3.Phase3DocxFixtureBuilder.MarkupDoi}</article-id>\n" +
+            "\t\t\t<elocation-id>e56132631</elocation-id>\n" +
+            "\t\t\t<contrib-group>\n" +
+            "\t\t\t\t<contrib contrib-type=\"author\">\n" +
+            "\t\t\t\t\t<name><surname>Costa</surname><given-names>Ana Beatriz</given-names></name>\n" +
+            "\t\t\t\t</contrib>\n" +
+            "\t\t\t</contrib-group>\n" +
+            "\t\t</article-meta>\n" +
+            "\t</front>\n" +
+            "</article>\n");
+
+        var exit = CliApp.Run(
+            new[] { "phase3", Path.Combine(packageDir, xmlName), "--non-interactive=accept" },
+            new StringWriter(),
+            new StringWriter());
+
+        Assert.Equal(CliApp.ExitSuccess, exit);
+
+        var diagnosticPath = Path.Combine(packageDir, "formatted-phase3", "1984-7033-cbab-26-03-e56132631.diagnostic.json");
+        Assert.True(File.Exists(diagnosticPath), ".diagnostic.json");
+
+        using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(diagnosticPath));
+        var statement = json.RootElement.GetProperty("phase3").GetProperty("creditStatement");
+        Assert.Equal("ABC: Conceptualization; Methodology. XYZ: Software.", statement.GetProperty("raw").GetString());
+        Assert.Equal("authorKeyed", statement.GetProperty("shape").GetString());
+
+        var entries = statement.GetProperty("entries").EnumerateArray().ToList();
+        var abc = Assert.Single(entries, e => e.GetProperty("authorKey").GetString() == "ABC");
+        var xyz = Assert.Single(entries, e => e.GetProperty("authorKey").GetString() == "XYZ");
+        Assert.Equal("resolved", abc.GetProperty("resolution").GetString());
+        Assert.True(abc.GetProperty("applied").GetBoolean());
+        Assert.Equal("notFound", xyz.GetProperty("resolution").GetString());
+        Assert.False(xyz.GetProperty("applied").GetBoolean());
+    }
+
     // Copies the corpus other.txt + all docx + the named XMLs into a temp layout
     // (root/{other.txt, scielo_markup/, scielo_package/}) so the CLI's walk-up
     // layout resolution finds them, leaving the repo corpus untouched.
