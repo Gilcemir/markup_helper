@@ -33,7 +33,11 @@ public sealed class CreditRolesInjectorTests
         }
     }
 
-    private static Phase3Context CreateContext(XDocument xml, string? credit, IConfirmer confirmer)
+    private static Phase3Context CreateContext(
+        XDocument xml,
+        string? credit,
+        IConfirmer confirmer,
+        bool? creditHeaderFound = null)
         => new()
         {
             Source = new DocxSource
@@ -41,11 +45,24 @@ public sealed class CreditRolesInjectorTests
                 ElocationId = "e54492621",
                 Doi = "10.1590/x",
                 CreditStatementRaw = credit,
+                // A body implies its header; a null body defaults to "no header".
+                CreditHeaderFound = creditHeaderFound ?? credit is not null,
             },
             Xml = xml,
             OtherNumber = "00201",
             Confirm = confirmer,
         };
+
+    /// <summary>
+    /// Runs the injector and asserts the ADR-005 contract that every exit of
+    /// <c>Apply</c> records a <see cref="CreditOutcome"/> on the context.
+    /// </summary>
+    private static CreditOutcome ApplyAndAssertOutcome(Phase3Context ctx, IReport report)
+    {
+        new CreditRolesInjector().Apply(ctx, report);
+        Assert.NotNull(ctx.Credit);
+        return ctx.Credit!;
+    }
 
     private static string Contrib(string surname, string givenNames, string? suffix = null)
     {
@@ -87,7 +104,7 @@ public sealed class CreditRolesInjectorTests
             Contrib("Lopes", "Danilo Alves Porto da Silva"),
             Contrib("Nascimento", "Ildon Rodrigues do"));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Lopes DAPS, Nascimento IRN", new ThrowingConfirmer()),
             new Report());
 
@@ -111,7 +128,7 @@ public sealed class CreditRolesInjectorTests
             Contrib("Lopes", "Danilo Alves Porto da Silva"),
             Contrib("Nascimento", "Ildon Rodrigues do"));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(
                 xml,
                 "Writing - original draft: Lopes DAPS, Nascimento IRN; "
@@ -133,7 +150,7 @@ public sealed class CreditRolesInjectorTests
             Contrib("Amaral", "Antônio Teixeira do", "Júnior"),
             Contrib("Santos", "Talles de Oliveira"));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "ATAJ: Conceptualization, Methodology", new ThrowingConfirmer()),
             new Report());
 
@@ -150,7 +167,7 @@ public sealed class CreditRolesInjectorTests
         var xml = ArticleWithContribs(Contrib("Amaral", "Antônio Teixeira do", "Júnior"));
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "ATAJ: Conceptualization, Choreography", confirmer),
             new Report());
 
@@ -168,7 +185,7 @@ public sealed class CreditRolesInjectorTests
             Contrib("Do", "HDK"));
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(
                 xml,
                 "All authors contributed to the study's conception and design. "
@@ -186,7 +203,7 @@ public sealed class CreditRolesInjectorTests
         var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Ferreira XYZ", confirmer),
             new Report());
 
@@ -203,7 +220,7 @@ public sealed class CreditRolesInjectorTests
             Contrib("Silva", "Carlos Daniel"));
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Silva ZZ", confirmer),
             new Report());
 
@@ -231,7 +248,7 @@ public sealed class CreditRolesInjectorTests
             LoadOptions.PreserveWhitespace);
         var report = new Report();
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Lopes DAPS", new ThrowingConfirmer()),
             report);
 
@@ -247,7 +264,7 @@ public sealed class CreditRolesInjectorTests
     {
         var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Lopes DAPS; Methodology: Lopes DAPS", new ThrowingConfirmer()),
             new Report());
 
@@ -266,7 +283,7 @@ public sealed class CreditRolesInjectorTests
         var before = xml.ToString(SaveOptions.DisableFormatting);
         var report = new Report();
 
-        new CreditRolesInjector().Apply(CreateContext(xml, null, new ThrowingConfirmer()), report);
+        ApplyAndAssertOutcome(CreateContext(xml, null, new ThrowingConfirmer()), report);
 
         Assert.Equal(before, xml.ToString(SaveOptions.DisableFormatting));
         var entry = Assert.Single(report.Entries);
@@ -292,7 +309,7 @@ public sealed class CreditRolesInjectorTests
             "</article>\n",
             LoadOptions.PreserveWhitespace);
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Lopes DAPS", new ThrowingConfirmer()),
             new Report());
 
@@ -315,7 +332,7 @@ public sealed class CreditRolesInjectorTests
             Confirm = new ThrowingConfirmer(),
         };
 
-        new CreditRolesInjector().Apply(ctx, new Report());
+        ApplyAndAssertOutcome(ctx, new Report());
 
         // Every named contributor receives at least one role.
         foreach (var surname in new[] { "Lopes", "Nascimento", "Faria", "Costa", "Casais", "Ferreira" })
@@ -352,7 +369,7 @@ public sealed class CreditRolesInjectorTests
         var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Lopes DAPS, Ferreira XYZ", confirmer),
             new Report());
 
@@ -369,7 +386,7 @@ public sealed class CreditRolesInjectorTests
         // "Choreography" is not a CRediT term → gate; both authors resolve.
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.FreeText));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(
                 xml,
                 "Conceptualization: Lopes DAPS, Nascimento IRN; Choreography: Lopes DAPS",
@@ -393,7 +410,7 @@ public sealed class CreditRolesInjectorTests
             Contrib("Nascimento", "Ildon Rodrigues do"));
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.FreeText));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(
                 xml,
                 "Conceptualization: Lopes DAPS; Methodology: Nascimento IRN; Choreography: Lopes DAPS",
@@ -425,7 +442,7 @@ public sealed class CreditRolesInjectorTests
         var report = new Report();
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.FreeText));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Lopes DAPS; Choreography: Lopes DAPS", confirmer),
             report);
 
@@ -441,7 +458,7 @@ public sealed class CreditRolesInjectorTests
         var report = new Report();
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.FreeText));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Conceptualization: Lopes DAPS; Choreography: Lopes DAPS", confirmer),
             report);
 
@@ -466,7 +483,7 @@ public sealed class CreditRolesInjectorTests
             Confirm = confirmer,
         };
 
-        new CreditRolesInjector().Apply(ctx, report);
+        ApplyAndAssertOutcome(ctx, report);
 
         // Previously-dropped resolved authors (unrecognized terms) now carry their
         // contributions as free text, alongside the previously-clean subset.
@@ -503,7 +520,7 @@ public sealed class CreditRolesInjectorTests
             Confirm = new AutoAcceptConfirmer(),
         };
 
-        new CreditRolesInjector().Apply(ctx, new Report());
+        ApplyAndAssertOutcome(ctx, new Report());
 
         // accept keeps the clean CRediT subset (Costa/Borel/Araújo) with @content-type;
         // free text is never auto-selected.
@@ -525,7 +542,7 @@ public sealed class CreditRolesInjectorTests
         // malformed.
         var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(xml, "Writing - review & editing: Lopes DAPS", new ThrowingConfirmer()),
             new Report());
 
@@ -547,7 +564,7 @@ public sealed class CreditRolesInjectorTests
         var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
         var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.FreeText));
 
-        new CreditRolesInjector().Apply(
+        ApplyAndAssertOutcome(
             CreateContext(
                 xml,
                 "Conceptualization: Lopes DAPS; Conception & design: Lopes DAPS",
@@ -577,10 +594,258 @@ public sealed class CreditRolesInjectorTests
             Confirm = confirmer,
         };
 
-        new CreditRolesInjector().Apply(ctx, new Report());
+        ApplyAndAssertOutcome(ctx, new Report());
 
         Assert.NotNull(confirmer.Received);
         Assert.DoesNotContain(doc.Document.Descendants(), e => e.Name.LocalName == "role");
+    }
+
+    // ── ADR-005 (v26n3): CreditOutcome recorded on Phase3Context on every path ──
+
+    [Fact]
+    public void Apply_Outcome_CleanStatement_AutoApplied_EveryEntryAppliedAndResolved()
+    {
+        var xml = ArticleWithContribs(
+            Contrib("Lopes", "Danilo Alves Porto da Silva"),
+            Contrib("Nascimento", "Ildon Rodrigues do"));
+        const string raw = "DAPSL: Conceptualization; Methodology. IRN: Software.";
+
+        var outcome = ApplyAndAssertOutcome(CreateContext(xml, raw, new ThrowingConfirmer()), new Report());
+
+        Assert.Equal(CreditDisposition.AutoApplied, outcome.Disposition);
+        Assert.Equal(CreditShape.AuthorKeyed, outcome.Shape);
+        Assert.Equal(raw, outcome.Raw);
+        Assert.Collection(
+            outcome.Entries,
+            e =>
+            {
+                Assert.Equal("DAPSL", e.AuthorKey);
+                Assert.Equal(new[] { "Conceptualization", "Methodology" }, e.Terms);
+                Assert.Equal(CreditResolution.Resolved, e.Resolution);
+                Assert.Empty(e.UnknownTerms);
+                Assert.True(e.Applied);
+            },
+            e =>
+            {
+                Assert.Equal("IRN", e.AuthorKey);
+                Assert.Equal(new[] { "Software" }, e.Terms);
+                Assert.Equal(CreditResolution.Resolved, e.Resolution);
+                Assert.Empty(e.UnknownTerms);
+                Assert.True(e.Applied);
+            });
+    }
+
+    [Fact]
+    public void Apply_Outcome_OneAuthorNotFound_AutoAccept_Confirmed_OnlyResolvedApplied()
+    {
+        var xml = ArticleWithContribs(
+            Contrib("Lopes", "Danilo Alves Porto da Silva"),
+            Contrib("Nascimento", "Ildon Rodrigues do"));
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, "DAPSL: Conceptualization. NHN: Methodology. IRN: Software.", new AutoAcceptConfirmer()),
+            new Report());
+
+        Assert.Equal(CreditDisposition.Confirmed, outcome.Disposition);
+        Assert.Equal(3, outcome.Entries.Count);
+
+        var missing = Assert.Single(outcome.Entries, e => e.AuthorKey == "NHN");
+        Assert.Equal(CreditResolution.NotFound, missing.Resolution);
+        Assert.False(missing.Applied);
+        Assert.Empty(missing.UnknownTerms);
+
+        Assert.All(
+            outcome.Entries.Where(e => e.AuthorKey != "NHN"),
+            e =>
+            {
+                Assert.Equal(CreditResolution.Resolved, e.Resolution);
+                Assert.True(e.Applied);
+            });
+        Assert.NotEmpty(RolesOf(xml, "Lopes"));
+        Assert.NotEmpty(RolesOf(xml, "Nascimento"));
+    }
+
+    [Fact]
+    public void Apply_Outcome_ConfirmerSkips_Skipped_EntriesListedNoneApplied()
+    {
+        var xml = ArticleWithContribs(
+            Contrib("Lopes", "Danilo Alves Porto da Silva"),
+            Contrib("Silva", "Ana Beatriz"),
+            Contrib("Silva", "Carlos Daniel"));
+        var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, "DAPSL: Conceptualization. ZZ: Methodology. XYZ: Software.", confirmer),
+            new Report());
+
+        Assert.Equal(CreditDisposition.Skipped, outcome.Disposition);
+        Assert.Equal(
+            new[] { CreditResolution.Resolved, CreditResolution.NotFound, CreditResolution.NotFound },
+            outcome.Entries.Select(e => e.Resolution));
+        Assert.All(outcome.Entries, e => Assert.False(e.Applied));
+        Assert.DoesNotContain(xml.Descendants(), e => e.Name.LocalName == "role");
+    }
+
+    [Fact]
+    public void Apply_Outcome_AmbiguousAuthor_ReportsAmbiguousResolution()
+    {
+        var xml = ArticleWithContribs(
+            Contrib("Silva", "Ana"),
+            Contrib("Souza", "Antônio"));
+        var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
+
+        // Bare "AS" is the full given+surname candidate of both contributors.
+        var outcome = ApplyAndAssertOutcome(CreateContext(xml, "AS: Methodology.", confirmer), new Report());
+
+        var entry = Assert.Single(outcome.Entries);
+        Assert.Equal(CreditResolution.Ambiguous, entry.Resolution);
+        Assert.False(entry.Applied);
+    }
+
+    [Fact]
+    public void Apply_Outcome_UnknownTerm_ListedOnItsEntryOnly()
+    {
+        var xml = ArticleWithContribs(
+            Contrib("Lopes", "Danilo Alves Porto da Silva"),
+            Contrib("Nascimento", "Ildon Rodrigues do"));
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, "DAPSL: Conceptualization, Metodology. IRN: Software.", new AutoAcceptConfirmer()),
+            new Report());
+
+        Assert.Equal(CreditDisposition.Confirmed, outcome.Disposition);
+        var lopes = Assert.Single(outcome.Entries, e => e.AuthorKey == "DAPSL");
+        Assert.Equal(new[] { "Metodology" }, lopes.UnknownTerms);
+        Assert.Equal(new[] { "Conceptualization", "Metodology" }, lopes.Terms);
+        Assert.Equal(CreditResolution.Resolved, lopes.Resolution);
+        Assert.False(lopes.Applied);
+
+        var nascimento = Assert.Single(outcome.Entries, e => e.AuthorKey == "IRN");
+        Assert.Empty(nascimento.UnknownTerms);
+        Assert.True(nascimento.Applied);
+    }
+
+    [Fact]
+    public void Apply_Outcome_FreeText_MarksPlacedAuthorsApplied()
+    {
+        var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
+        var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.FreeText));
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, "Conceptualization: Lopes DAPS; Choreography: Lopes DAPS, Ferreira XYZ", confirmer),
+            new Report());
+
+        Assert.Equal(CreditDisposition.FreeText, outcome.Disposition);
+        Assert.Equal(CreditShape.RoleKeyed, outcome.Shape);
+        var lopes = Assert.Single(outcome.Entries, e => e.AuthorKey == "Lopes DAPS");
+        Assert.True(lopes.Applied);
+        Assert.Equal(new[] { "Choreography" }, lopes.UnknownTerms);
+        var ferreira = Assert.Single(outcome.Entries, e => e.AuthorKey == "Ferreira XYZ");
+        Assert.Equal(CreditResolution.NotFound, ferreira.Resolution);
+        Assert.False(ferreira.Applied);
+    }
+
+    [Fact]
+    public void Apply_Outcome_ContribAlreadyHasRole_EntryNotApplied()
+    {
+        var xml = XDocument.Parse(
+            "<article>\n" +
+            "\t<contrib-group>\n" +
+            "\t\t<contrib contrib-type=\"author\">\n" +
+            "\t\t\t<name>\n" +
+            "\t\t\t\t<surname>Lopes</surname>\n" +
+            "\t\t\t\t<given-names>Danilo Alves Porto da Silva</given-names>\n" +
+            "\t\t\t</name>\n" +
+            "\t\t\t<xref ref-type=\"aff\" rid=\"aff1\">1</xref>\n" +
+            "\t\t\t<role content-type=\"http://credit.niso.org/contributor-roles/software/\">Software</role>\n" +
+            "\t\t</contrib>\n" +
+            "\t</contrib-group>\n" +
+            "</article>\n",
+            LoadOptions.PreserveWhitespace);
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, "Conceptualization: Lopes DAPS", new ThrowingConfirmer()),
+            new Report());
+
+        // The document disposition is still autoApplied (the gate was satisfied),
+        // but idempotency left this contributor untouched, so its entry is not applied.
+        Assert.Equal(CreditDisposition.AutoApplied, outcome.Disposition);
+        var entry = Assert.Single(outcome.Entries);
+        Assert.Equal(CreditResolution.Resolved, entry.Resolution);
+        Assert.False(entry.Applied);
+    }
+
+    [Fact]
+    public void Apply_Outcome_ProseStatement_ProseShapeNoEntriesRawKept()
+    {
+        var xml = ArticleWithContribs(Contrib("Le", "TTN"));
+        var confirmer = new StubConfirmer(new ConfirmResult(string.Empty, ConfirmDisposition.Skipped));
+        const string raw = "All authors contributed to the study's conception and design.";
+
+        var outcome = ApplyAndAssertOutcome(CreateContext(xml, raw, confirmer), new Report());
+
+        Assert.Equal(CreditDisposition.Prose, outcome.Disposition);
+        Assert.Equal(CreditShape.Prose, outcome.Shape);
+        Assert.Empty(outcome.Entries);
+        Assert.Equal(raw, outcome.Raw);
+    }
+
+    [Fact]
+    public void Apply_CreditHeaderFoundWithEmptyBody_WarnsHeaderEmpty_NoAbsentInfo()
+    {
+        // INV-02: a present CREDIT STATEMENT header is never silently dropped.
+        var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
+        var before = xml.ToString(SaveOptions.DisableFormatting);
+        var report = new Report();
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, null, new ThrowingConfirmer(), creditHeaderFound: true),
+            report);
+
+        var entry = Assert.Single(report.Entries);
+        Assert.Equal(ReportLevel.Warn, entry.Level);
+        Assert.Equal("credit-roles", entry.Rule);
+        Assert.Contains("body is empty", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(report.Entries, e => e.Message.Contains("No CREDIT statement", StringComparison.Ordinal));
+
+        Assert.Equal(CreditDisposition.HeaderEmpty, outcome.Disposition);
+        Assert.Null(outcome.Raw);
+        Assert.Empty(outcome.Entries);
+        Assert.Equal(before, xml.ToString(SaveOptions.DisableFormatting));
+    }
+
+    [Fact]
+    public void Apply_NoCreditHeader_KeepsAbsentInfo_OutcomeAbsent()
+    {
+        var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
+        var report = new Report();
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, null, new ThrowingConfirmer(), creditHeaderFound: false),
+            report);
+
+        var entry = Assert.Single(report.Entries);
+        Assert.Equal(ReportLevel.Info, entry.Level);
+        Assert.Contains("No CREDIT statement", entry.Message, StringComparison.Ordinal);
+        Assert.Equal(CreditDisposition.Absent, outcome.Disposition);
+        Assert.Null(outcome.Raw);
+        Assert.Empty(outcome.Entries);
+    }
+
+    [Fact]
+    public void Apply_WhitespaceOnlyBodyWithHeader_TreatedAsHeaderEmpty()
+    {
+        // DocxSourceReader never yields a whitespace-only body, but the injector's
+        // blank test must agree with the header flag rather than the null check.
+        var xml = ArticleWithContribs(Contrib("Lopes", "Danilo Alves Porto da Silva"));
+        var report = new Report();
+
+        var outcome = ApplyAndAssertOutcome(
+            CreateContext(xml, "   ", new ThrowingConfirmer(), creditHeaderFound: true),
+            report);
+
+        Assert.Equal(CreditDisposition.HeaderEmpty, outcome.Disposition);
+        Assert.Equal(ReportLevel.Warn, Assert.Single(report.Entries).Level);
     }
 
     private static string CorpusPackagePath(string file) => CorpusPath("scielo_package", file);

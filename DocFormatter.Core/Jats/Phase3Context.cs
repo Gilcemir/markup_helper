@@ -25,4 +25,12 @@ public sealed class Phase3Context
 
     /// <summary>The inline confirmation gate for ambiguous proposals (ADR-006).</summary>
     public required IConfirmer Confirm { get; init; }
+
+    /// <summary>
+    /// The structured result of the <c>credit-roles</c> injector, written by
+    /// <see cref="CreditRolesInjector"/> on every exit of its <c>Apply</c> and
+    /// read by the diagnostic and the batch summary (ADR-005).
+    /// <see langword="null"/> until that injector has run.
+    /// </summary>
+    public CreditOutcome? Credit { get; set; }
 }
