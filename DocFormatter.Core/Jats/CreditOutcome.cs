@@ -4,15 +4,18 @@ namespace DocFormatter.Core.Jats;
 /// One contributor's row in a <see cref="CreditOutcome"/>: the author key as
 /// written in the statement, the written role <paramref name="Terms"/>, how the
 /// key resolved against the XML contributors (<see cref="CreditResolution"/>),
-/// the terms that did not map to a CRediT role, and whether this run actually
-/// wrote <c>&lt;role&gt;</c> elements for the contributor.
+/// the terms that did not map to a CRediT role, whether this run actually
+/// wrote <c>&lt;role&gt;</c> elements for the contributor, and whether it was
+/// skipped because the <c>&lt;contrib&gt;</c> already carried a <c>&lt;role&gt;</c>
+/// (idempotent re-run over an already-injected XML — not a pendency).
 /// </summary>
 public sealed record CreditEntryOutcome(
     string AuthorKey,
     IReadOnlyList<string> Terms,
     string Resolution,
     IReadOnlyList<string> UnknownTerms,
-    bool Applied);
+    bool Applied,
+    bool AlreadyPresent = false);
 
 /// <summary>
 /// The single structured result of <c>credit-roles</c> for one document

@@ -39,8 +39,6 @@ public sealed class CreditRolesInjector : IJatsInjector
     private const string ContentTypeAttribute = "content-type";
 
     /// <summary>The applied-author set of a path that wrote nothing (skipped).</summary>
-    private static readonly IReadOnlySet<string> NoAuthors = new HashSet<string>(StringComparer.Ordinal);
-
     /// <inheritdoc />
     public string Name => "credit-roles";
 
@@ -112,7 +110,7 @@ public sealed class CreditRolesInjector : IJatsInjector
         if (confirm.Disposition == ConfirmDisposition.Skipped)
         {
             report.Warn(Name, $"CRediT roles not applied ({reason}).");
-            ctx.Credit = BuildOutcome(raw, statement.Shape, plan, NoAuthors, CreditDisposition.Skipped);
+            ctx.Credit = BuildOutcome(raw, statement.Shape, plan, new EmitResult(), CreditDisposition.Skipped);
             return;
         }
 
@@ -136,13 +134,14 @@ public sealed class CreditRolesInjector : IJatsInjector
     /// Projects the plan onto the <see cref="CreditOutcome"/> recorded on the
     /// context (ADR-005): one entry per parsed author, in statement order, marked
     /// <see cref="CreditEntryOutcome.Applied"/> only when this run wrote roles for
-    /// it (<paramref name="appliedAuthors"/>, keyed by author key).
+    /// it and <see cref="CreditEntryOutcome.AlreadyPresent"/> when the idempotency
+    /// check skipped it (<paramref name="emitted"/>, keyed by author key).
     /// </summary>
     private static CreditOutcome BuildOutcome(
         string raw,
         CreditShape shape,
         IReadOnlyList<PlanItem> plan,
-        IReadOnlySet<string> appliedAuthors,
+        EmitResult emitted,
         string disposition)
     {
         var entries = plan
@@ -151,9 +150,21 @@ public sealed class CreditRolesInjector : IJatsInjector
                 item.WrittenTerms,
                 CreditResolution.From(item.Status),
                 item.UnknownTerms,
-                appliedAuthors.Contains(item.AuthorKey)))
+                emitted.Applied.Contains(item.AuthorKey),
+                emitted.AlreadyPresent.Contains(item.AuthorKey)))
             .ToList();
         return new CreditOutcome(raw, shape, entries, disposition);
+    }
+
+    /// <summary>
+    /// What an emit pass did per author key: roles written this run, or skipped
+    /// because the <c>&lt;contrib&gt;</c> already carried a <c>&lt;role&gt;</c>.
+    /// </summary>
+    private sealed class EmitResult
+    {
+        public HashSet<string> Applied { get; } = new(StringComparer.Ordinal);
+
+        public HashSet<string> AlreadyPresent { get; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -222,9 +233,9 @@ public sealed class CreditRolesInjector : IJatsInjector
     /// already carries any <c>&lt;role&gt;</c> (idempotency, ADR-005) and reporting
     /// every disposition. Returns the author keys that received roles in this run.
     /// </summary>
-    private IReadOnlySet<string> Emit(IReadOnlyList<PlanItem> plan, IReport report, ConfirmDisposition disposition)
+    private EmitResult Emit(IReadOnlyList<PlanItem> plan, IReport report, ConfirmDisposition disposition)
     {
-        var appliedAuthors = new HashSet<string>(StringComparer.Ordinal);
+        var result = new EmitResult();
         foreach (var item in plan)
         {
             if (!item.IsClean || item.Contrib is null || item.Roles.Count == 0)
@@ -235,16 +246,17 @@ public sealed class CreditRolesInjector : IJatsInjector
             if (item.Contrib.Elements().Any(e => e.Name.LocalName == RoleName))
             {
                 report.Info(Name, $"<{ContribName}> for '{item.AuthorKey}' already has <{RoleName}>; skipped.");
+                result.AlreadyPresent.Add(item.AuthorKey);
                 continue;
             }
 
             EmitRoles(item.Contrib, item.Roles);
-            appliedAuthors.Add(item.AuthorKey);
+            result.Applied.Add(item.AuthorKey);
             var applied = string.Join(", ", item.Roles.Select(r => r.Display));
             report.Info(Name, $"Injected {item.Roles.Count} <{RoleName}> for '{item.AuthorKey}' ({disposition}): {applied}.");
         }
 
-        return appliedAuthors;
+        return result;
     }
 
     /// <summary>
@@ -258,12 +270,12 @@ public sealed class CreditRolesInjector : IJatsInjector
     /// <c>&lt;surname&gt;</c>); they are reported, never silently dropped.
     /// Returns the author keys that received roles in this run.
     /// </summary>
-    private IReadOnlySet<string> EmitFreeText(
+    private EmitResult EmitFreeText(
         IReadOnlyList<PlanItem> plan,
         IReport report,
         IReadOnlyList<string> unresolvedAuthors)
     {
-        var appliedAuthors = new HashSet<string>(StringComparer.Ordinal);
+        var result = new EmitResult();
         foreach (var item in plan)
         {
             if (item.Contrib is null || item.WrittenTerms.Count == 0)
@@ -274,11 +286,12 @@ public sealed class CreditRolesInjector : IJatsInjector
             if (item.Contrib.Elements().Any(e => e.Name.LocalName == RoleName))
             {
                 report.Info(Name, $"<{ContribName}> for '{item.AuthorKey}' already has <{RoleName}>; skipped.");
+                result.AlreadyPresent.Add(item.AuthorKey);
                 continue;
             }
 
             EmitRoles(item.Contrib, item.WrittenTerms.Select(t => new CreditRole(t, ContentTypeUrl: null)).ToList());
-            appliedAuthors.Add(item.AuthorKey);
+            result.Applied.Add(item.AuthorKey);
             var applied = string.Join(", ", item.WrittenTerms);
             report.Info(
                 Name,
@@ -297,7 +310,7 @@ public sealed class CreditRolesInjector : IJatsInjector
                     + $"{string.Join(", ", unresolvedAuthors)}.");
         }
 
-        return appliedAuthors;
+        return result;
     }
 
     /// <summary>

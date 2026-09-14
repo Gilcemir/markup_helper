@@ -327,6 +327,30 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
     }
 
     [Fact]
+    public void WritePhase3_AlreadyPresentEntry_SerializesTheFlag()
+    {
+        var xml = FullyInjectedXml();
+        var report = new Report();
+        report.Warn("credit-roles", "Unresolved CRediT left for manual handling (unresolved author(s): MRC (NotFound)).");
+        var outcome = new CreditOutcome("LRS: Data curation. MRC: Funding acquisition.", CreditShape.AuthorKeyed,
+            new[]
+            {
+                new CreditEntryOutcome("LRS", new[] { "Data curation" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                new CreditEntryOutcome("MRC", new[] { "Funding acquisition" }, CreditResolution.NotFound, Array.Empty<string>(), Applied: false),
+            },
+            CreditDisposition.Confirmed);
+
+        var path = Path.Combine(_tempDir, "already-present.diagnostic.json");
+        Assert.True(DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions(), outcome));
+
+        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        var entries = json.RootElement.GetProperty("phase3").GetProperty("creditStatement").GetProperty("entries");
+        Assert.True(entries[0].GetProperty("alreadyPresent").GetBoolean());
+        Assert.False(entries[0].GetProperty("applied").GetBoolean());
+        Assert.False(entries[1].GetProperty("alreadyPresent").GetBoolean());
+    }
+
+    [Fact]
     public void BuildPhase3Document_ProseOutcome_HasProseShapeEmptyEntriesAndRaw()
     {
         var xml = new XDocument(new XElement("article", new XElement("front")));

@@ -64,9 +64,10 @@ public sealed class CreditRolesInjectorTests
         return ctx.Credit!;
     }
 
-    private static string Contrib(string surname, string givenNames, string? suffix = null)
+    private static string Contrib(string surname, string givenNames, string? suffix = null, string? roles = null)
     {
         var suffixLine = suffix is null ? string.Empty : $"\t\t\t\t<suffix>{suffix}</suffix>\n";
+        var rolesLine = roles is null ? string.Empty : $"\t\t\t{roles}\n";
         return
             "\t\t<contrib contrib-type=\"author\">\n" +
             "\t\t\t<name>\n" +
@@ -75,6 +76,7 @@ public sealed class CreditRolesInjectorTests
             suffixLine +
             "\t\t\t</name>\n" +
             "\t\t\t<xref ref-type=\"aff\" rid=\"aff1\">1</xref>\n" +
+            rolesLine +
             "\t\t</contrib>\n";
     }
 
@@ -868,5 +870,32 @@ public sealed class CreditRolesInjectorTests
 
         throw new InvalidOperationException(
             $"Could not locate examples/phase-3/{subDir}/{file} from {AppContext.BaseDirectory}.");
+    }
+
+    [Fact]
+    public void Apply_Outcome_ContribAlreadyHasRole_EntryIsAlreadyPresent_NotApplied_NotPending()
+    {
+        // Re-run over an already-injected XML (credit-corpus-v26n3-fixes task_09
+        // finding): the idempotency skip is settled state, not a pendency.
+        var xml = ArticleWithContribs(
+            Contrib("Silva", "Ana", roles: "<role content-type=\"http://credit.niso.org/contributor-roles/software/\">Software</role>"),
+            Contrib("Costa", "Bruno"));
+        var raw = "AS: Software. BC: Methodology. ZZ: Validation.";
+
+        var outcome = ApplyAndAssertOutcome(CreateContext(xml, raw, new AutoAcceptConfirmer()), new Report());
+
+        var asEntry = Assert.Single(outcome.Entries, e => e.AuthorKey == "AS");
+        Assert.True(asEntry.AlreadyPresent);
+        Assert.False(asEntry.Applied);
+        Assert.Equal(CreditResolution.Resolved, asEntry.Resolution);
+
+        var bcEntry = Assert.Single(outcome.Entries, e => e.AuthorKey == "BC");
+        Assert.True(bcEntry.Applied);
+        Assert.False(bcEntry.AlreadyPresent);
+
+        var zzEntry = Assert.Single(outcome.Entries, e => e.AuthorKey == "ZZ");
+        Assert.False(zzEntry.Applied);
+        Assert.False(zzEntry.AlreadyPresent);
+        Assert.Equal(CreditResolution.NotFound, zzEntry.Resolution);
     }
 }

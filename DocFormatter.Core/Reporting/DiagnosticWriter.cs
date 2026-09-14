@@ -218,7 +218,8 @@ public static class DiagnosticWriter
             Raw: credit.Raw,
             Shape: ToCamelCase(credit.Shape.ToString()),
             Entries: credit.Entries
-                .Select(e => new DiagnosticCreditEntry(e.AuthorKey, e.Terms, e.Resolution, e.UnknownTerms, e.Applied))
+                .Select(e => new DiagnosticCreditEntry(
+                    e.AuthorKey, e.Terms, e.Resolution, e.UnknownTerms, e.Applied, e.AlreadyPresent))
                 .ToList());
     }
 

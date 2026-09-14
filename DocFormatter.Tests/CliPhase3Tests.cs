@@ -377,6 +377,40 @@ public sealed class CliPhase3Tests : IDisposable
     }
 
     [Fact]
+    public void Phase3PendencyLines_AlreadyPresentAuthors_AreListedApartAndNotPending()
+    {
+        // Re-run over an already-injected XML: six contributors skipped by the
+        // idempotency check, one still unresolved (5719 shape on task_09's copy).
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[]
+            {
+                new CreditEntryOutcome("LRS", new[] { "Data curation" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                new CreditEntryOutcome("GFPA", new[] { "Methodology" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                Entry("MRC", CreditResolution.NotFound, applied: false),
+            },
+            CreditDisposition.Confirmed);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit, prompted: true)));
+        Assert.Equal("  credit: already present LRS, GFPA; pending MRC (notFound)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_AppliedAndAlreadyPresent_BothListedBeforePending()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[]
+            {
+                Entry("A"),
+                new CreditEntryOutcome("B", new[] { "Software" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                Entry("C", CreditResolution.Ambiguous, applied: false),
+            },
+            CreditDisposition.Confirmed);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit)));
+        Assert.Equal("  credit: applied A; already present B; pending C (ambiguous)", line);
+    }
+
+    [Fact]
     public void Phase3PendencyLines_BrokenNames_AppendsCountAfterCreditLine()
     {
         var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,

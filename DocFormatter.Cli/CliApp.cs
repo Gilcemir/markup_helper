@@ -714,15 +714,36 @@ internal static class CliApp
         }
 
         var applied = credit.Entries.Where(e => e.Applied).Select(e => e.AuthorKey).ToList();
+        var alreadyPresent = credit.Entries.Where(e => e.AlreadyPresent).Select(e => e.AuthorKey).ToList();
         var pending = credit.Entries
-            .Where(e => !e.Applied)
+            .Where(e => !e.Applied && !e.AlreadyPresent)
             .Select(e => $"{e.AuthorKey} ({DescribePendingReason(e, credit.Disposition)})")
             .ToList();
 
-        var appliedText = applied.Count == 0 ? "applied none" : "applied " + string.Join(", ", applied);
-        return pending.Count == 0
-            ? appliedText
-            : appliedText + "; pending " + string.Join(", ", pending);
+        // A re-run over an already-injected XML skips contributors that carry a
+        // <role> (idempotency): they are settled, not pending, and are listed apart.
+        var parts = new List<string>(3);
+        if (applied.Count > 0)
+        {
+            parts.Add("applied " + string.Join(", ", applied));
+        }
+
+        if (alreadyPresent.Count > 0)
+        {
+            parts.Add("already present " + string.Join(", ", alreadyPresent));
+        }
+
+        if (parts.Count == 0)
+        {
+            parts.Add("applied none");
+        }
+
+        if (pending.Count > 0)
+        {
+            parts.Add("pending " + string.Join(", ", pending));
+        }
+
+        return string.Join("; ", parts);
     }
 
     // Why an author entry was not written: its resolution when it did not resolve,

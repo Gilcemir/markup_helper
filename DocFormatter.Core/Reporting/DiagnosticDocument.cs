@@ -118,15 +118,17 @@ public sealed record DiagnosticCreditStatement(
 /// One author entry of a <see cref="DiagnosticCreditStatement"/>: the key as
 /// written, the written role <paramref name="Terms"/>, how the key resolved
 /// against the XML contributors (<c>resolved</c>/<c>notFound</c>/<c>ambiguous</c>),
-/// the terms that did not map to a CRediT role, and whether this run wrote
-/// <c>&lt;role&gt;</c> elements for the contributor.
+/// the terms that did not map to a CRediT role, whether this run wrote
+/// <c>&lt;role&gt;</c> elements for the contributor, and whether it was skipped
+/// because the <c>&lt;contrib&gt;</c> already carried a <c>&lt;role&gt;</c>.
 /// </summary>
 public sealed record DiagnosticCreditEntry(
     string AuthorKey,
     IReadOnlyList<string> Terms,
     string Resolution,
     IReadOnlyList<string> UnknownTerms,
-    bool Applied)
+    bool Applied,
+    bool AlreadyPresent = false)
 {
     public bool Equals(DiagnosticCreditEntry? other)
     {
@@ -143,6 +145,7 @@ public sealed record DiagnosticCreditEntry(
         return string.Equals(AuthorKey, other.AuthorKey, StringComparison.Ordinal)
             && string.Equals(Resolution, other.Resolution, StringComparison.Ordinal)
             && Applied == other.Applied
+            && AlreadyPresent == other.AlreadyPresent
             && Terms.SequenceEqual(other.Terms, StringComparer.Ordinal)
             && UnknownTerms.SequenceEqual(other.UnknownTerms, StringComparer.Ordinal);
     }
@@ -153,6 +156,7 @@ public sealed record DiagnosticCreditEntry(
         hash.Add(AuthorKey, StringComparer.Ordinal);
         hash.Add(Resolution, StringComparer.Ordinal);
         hash.Add(Applied);
+        hash.Add(AlreadyPresent);
         foreach (var term in Terms)
         {
             hash.Add(term, StringComparer.Ordinal);
