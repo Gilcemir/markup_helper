@@ -111,9 +111,21 @@ Text extraction, tokenization, heuristics and regex for field detection
   `ExtractOrcidLinksRule` and `ParseAuthorsRule` were merged into a
   single `ExtractAuthorsRule` (refactor of metadata/adr-003).
   → metadata/adr-006
+- **Byline plain-text ORCID** — `ExtractAuthorsRule.AppendRunTokens`
+  emits a plain-text ORCID (even glued to the name, `Bruzi0000-…`) as
+  `TokenKind.Orcid`; WARN when a name's last token repeats an earlier
+  one. → credit-corpus-v26n3-fixes/adr-006
 - **Corresponding-author tokenization** — `* E-mail:` marker + email
   regex, two-pass; strips the `* E-mail: … ORCID: …` trailer from the
   affiliation. → polish/adr-003
+- **CREDIT author-keyed grammar** — After the `:`, `;` and `,` split
+  terms; an all-caps initials piece is a pending co-key of the next
+  `X:` entry; `[p]…[/p]` is content, not a section end (INV-02).
+  → credit-corpus-v26n3-fixes/adr-003
+- **CREDIT initials resolver tiers** — Full-name candidates
+  (given+surname[+suffix]) match before given-only; hyphenated tokens
+  and capitalized particles yield variants (`LB`/`LBB`, `TB`/`TVB`);
+  uniqueness required within the matched tier. → credit-corpus-v26n3-fixes/adr-004
 - **HistDateParser phrase inventory** — Recognized date shapes
   catalogued from `AccessedOnHandler.cs` plus the SciELO `before/`
   corpus, extended with ISO / year-only / English-abbrev forms; TDD
@@ -155,6 +167,9 @@ cascade, section promotion, italic preservation).
 - **Phase 3 = 2 Optional rules** — `MoveHistoryRule` and
   `PromoteSectionsRule` kept separate, not combined into one rule.
   → section/adr-001
+- **Phase 3 `contrib-names` rule** — Verification-only injector WARNs
+  per `<contrib>` whose `<surname>` is empty or carries digits/ORCID;
+  never blocks CRediT injection on that contributor. → credit-corpus-v26n3-fixes/adr-002
 - **Phase 3 CRediT free-text fallback** — Operator-chosen
   `ConfirmDisposition.FreeText` emits every `<role>` without
   `@content-type` (SPS per-document all-or-nothing) when terms are
@@ -192,10 +207,18 @@ CLI surface, diagnostic output, build/CI, output file layout.
   auto-accept / fail-on-prompt for tests and batch; golden corpus runs
   `accept`, a `fail` CI run flags newly-ambiguous docs.
   → phase-3-jats-tags/adr-006
+- **Phase 3 CRediT outcome record** — `CreditRolesInjector` writes a
+  `CreditOutcome` (raw, shape, per-key resolution, `applied` /
+  `alreadyPresent`) on `Phase3Context.Credit`; consumed by
+  `.diagnostic.json` and `_batch_summary.txt`. → credit-corpus-v26n3-fixes/adr-005
 - **`phase2` / `phase2-verify` CLI** — Hand-rolled subcommand
   dispatcher inside `CliApp.Run` extends the existing parser; rejects
   `System.CommandLine` migration as scope creep.
   → phase-2-tagging-author-fixes/adr-005
+- **v0.3.1 patch release scope** — CBAB v26n3 CRediT corrections (Phase 3
+  grammar / resolver / `contrib-names` / diagnostic + Phase 1 plain-text
+  ORCID) ship together as one patch tag, validated once on the v26n3
+  corpus. → credit-corpus-v26n3-fixes/adr-001
 
 ---
 
@@ -204,6 +227,10 @@ CLI surface, diagnostic output, build/CI, output file layout.
 Decisions grouped by implementation phase. Use this to answer *"what
 was decided during feature X?"*.
 
+- [credit-corpus-v26n3-fixes/](credit-corpus-v26n3-fixes/) — 6 ADRs —
+  Phase 3 corpus fixes for CBAB v26n3: author-keyed CREDIT grammar with
+  `;`, tiered initials resolver, `contrib-names` rule, CRediT outcome in
+  diagnostic/summary, plain-text ORCID in Phase 1 bylines (INV-02).
 - [header-formatting-polish/](header-formatting-polish/) — 4 ADRs —
   Phase 2: alignment, spacing, abstract format, corresponding-author
   e-mail.

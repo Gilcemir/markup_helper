@@ -35,3 +35,12 @@ Every rule has a test that compares the multiset of non-empty trimmed
 body texts before and after, asserting an empty difference.
 
 Source: docs/decisions/section-formatting-and-history-move/adr-002-content-preservation-invariant.md
+
+## INV-02 — A present CREDIT statement is never silently dropped
+
+When the docx carries a `CREDIT STATEMENT` header, Phase 3 either parses
+its body or reports it at `[WARN]` level or above. An `[INFO]` "no
+statement" line is emitted only when the header itself is absent. Body
+paragraphs tagged `[p]…[/p]` are content, not section terminators.
+
+Source: docs/decisions/credit-corpus-v26n3-fixes/adr-003.md
