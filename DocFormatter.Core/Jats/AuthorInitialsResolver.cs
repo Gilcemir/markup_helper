@@ -36,13 +36,18 @@ public sealed record AuthorResolution(XElement? Contrib, ResolveStatus Status);
 /// </summary>
 public static class AuthorInitialsResolver
 {
-    // Lowercase name particles dropped when building candidate initials (e.g.
-    // "Antônio Teixeira do" → AT, "Danilo … da Silva" → D…S).
+    // Name particles. Lookup is case-insensitive; the token's own casing decides
+    // the variants: a lowercase particle ("Antônio Teixeira do" → AT) is always
+    // dropped, a capitalized one ("Truong Van" → T and TV) yields both variants.
     private static readonly HashSet<string> Particles = new(StringComparer.OrdinalIgnoreCase)
     {
         "da", "das", "de", "del", "della", "di", "do", "dos", "du", "e",
         "la", "le", "van", "von", "y",
     };
+
+    // Hyphens that split a compound token into sub-tokens: ASCII, U+2010 HYPHEN,
+    // U+2013 EN DASH (Word substitutes the latter two).
+    private static readonly char[] Hyphens = { '-', '\u2010', '\u2013' };
 
     /// <summary>
     /// Resolves <paramref name="authorKey"/> against <paramref name="contribs"/>.
@@ -64,9 +69,21 @@ public static class AuthorInitialsResolver
             return ResolveBySurname(surname, initials, contribs);
         }
 
-        // Bare initials: match against each contributor's candidate initials.
-        var matches = contribs.Where(c => CandidateInitials(c).Contains(NormalizeInitials(key))).ToList();
-        return Classify(matches);
+        // Bare initials (ADR-004): full-name candidates are matched first across
+        // every contributor; the given-names-only tier is a fallback used only
+        // when no contributor matched a full candidate. Uniqueness is required
+        // within the tier that matched.
+        var normalized = NormalizeInitials(key);
+        var candidates = contribs.Select(c => (Contrib: c, Candidates: CandidateInitials(c))).ToList();
+
+        var full = candidates.Where(x => x.Candidates.Full.Contains(normalized)).Select(x => x.Contrib).ToList();
+        if (full.Count > 0)
+        {
+            return Classify(full);
+        }
+
+        var givenOnly = candidates.Where(x => x.Candidates.GivenOnly.Contains(normalized)).Select(x => x.Contrib).ToList();
+        return Classify(givenOnly);
     }
 
     private static AuthorResolution ResolveBySurname(
@@ -86,10 +103,12 @@ public static class AuthorInitialsResolver
         }
 
         // Several contributors share the surname: only a unique initials match
-        // disambiguates; otherwise the key stays ambiguous and is prompted.
+        // (in either candidate tier) disambiguates; otherwise the key stays
+        // ambiguous and is prompted.
         if (initials != null)
         {
-            var narrowed = bySurname.Where(c => CandidateInitials(c).Contains(NormalizeInitials(initials))).ToList();
+            var normalized = NormalizeInitials(initials);
+            var narrowed = bySurname.Where(c => CandidateInitials(c).ContainsInAnyTier(normalized)).ToList();
             if (narrowed.Count == 1)
             {
                 return new AuthorResolution(narrowed[0], ResolveStatus.Resolved);
@@ -141,10 +160,13 @@ public static class AuthorInitialsResolver
         return tokens.Length == 0 ? value : tokens[0];
     }
 
-    // A trailing initials token is two or more letters, all uppercase (e.g.
-    // "DAPS", "OJ"); a single capital like a one-letter name is not treated as
-    // initials to avoid swallowing a short surname.
-    private static bool IsInitialsToken(string token)
+    /// <summary>
+    /// Whether <paramref name="token"/> is an initials block: two or more letters,
+    /// all uppercase (e.g. <c>DAPS</c>, <c>OJ</c>). A single capital like a
+    /// one-letter name is not treated as initials to avoid swallowing a short
+    /// surname. Shared with <see cref="CreditStatementParser"/>.
+    /// </summary>
+    internal static bool IsInitialsToken(string token)
         => token.Length >= 2 && token.All(char.IsLetter) && token.All(char.IsUpper);
 
     private static bool SurnameMatches(XElement contrib, string surname)
@@ -157,44 +179,102 @@ public static class AuthorInitialsResolver
         => ChildText(contrib, "surname").Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
     /// <summary>
-    /// The candidate initials strings for a contributor: combinations of the
-    /// given-name initials, the surname initial(s), and a suffix initial, with
-    /// lowercase particles dropped. Covers the corpus orderings (e.g.
-    /// <c>Antônio Teixeira do</c> + <c>Amaral</c> + <c>Júnior</c> → <c>ATAJ</c>).
+    /// The two candidate tiers for a contributor (ADR-004). <see cref="Full"/>
+    /// holds every full combination — given+surname+suffix, given+surname and
+    /// surname+given — over the initials variants of each name part (e.g.
+    /// <c>Antônio Teixeira do</c> + <c>Amaral</c> + <c>Júnior</c> → <c>ATAJ</c>);
+    /// <see cref="GivenOnly"/> holds the given-names initials alone, used only as
+    /// a fallback when no contributor matches a full candidate.
     /// </summary>
-    private static HashSet<string> CandidateInitials(XElement contrib)
+    private sealed record CandidateTiers(HashSet<string> Full, HashSet<string> GivenOnly)
     {
-        var given = Initials(ChildText(contrib, "given-names"));
-        var surname = Initials(ChildText(contrib, "surname"));
-        var suffix = Initials(ChildText(contrib, "suffix"));
-
-        return new HashSet<string>(StringComparer.Ordinal)
-        {
-            given + surname + suffix,
-            given + surname,
-            surname + given,
-            given,
-        };
+        public bool ContainsInAnyTier(string initials) => Full.Contains(initials) || GivenOnly.Contains(initials);
     }
 
-    private static string Initials(string text)
+    private static CandidateTiers CandidateInitials(XElement contrib)
     {
-        var builder = new StringBuilder();
-        foreach (var token in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (Particles.Contains(token))
-            {
-                continue;
-            }
+        var given = InitialsVariants(ChildText(contrib, "given-names"));
+        var surname = InitialsVariants(ChildText(contrib, "surname"));
+        var suffix = InitialsVariants(ChildText(contrib, "suffix"));
 
-            var folded = Fold(token);
-            if (folded.Length > 0)
+        var full = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var g in given)
+        {
+            foreach (var s in surname)
             {
-                builder.Append(char.ToUpperInvariant(folded[0]));
+                full.Add(g + s);
+                full.Add(s + g);
+                foreach (var x in suffix)
+                {
+                    full.Add(g + s + x);
+                }
             }
         }
 
-        return builder.ToString();
+        return new CandidateTiers(full, new HashSet<string>(given, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Every initials string a name part can be written as. Each space-separated
+    /// token contributes a list of variants — a hyphenated token its first initial
+    /// and one initial per sub-token (<c>Barboza-Barquero</c> → B, BB); a
+    /// capitalized particle dropped and kept (<c>Van</c> → "", V); a lowercase
+    /// particle dropped; any other token its initial — combined by cartesian
+    /// product. A name part with no letters yields the single empty string.
+    /// </summary>
+    private static IReadOnlyList<string> InitialsVariants(string text)
+    {
+        IReadOnlyList<string> variants = new[] { string.Empty };
+        foreach (var token in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            variants = Combine(variants, TokenVariants(token));
+        }
+
+        return variants;
+    }
+
+    private static IReadOnlyList<string> TokenVariants(string token)
+    {
+        if (Particles.Contains(token))
+        {
+            var initial = Initial(token);
+            return initial.Length > 0 && char.IsUpper(token[0])
+                ? new[] { string.Empty, initial }
+                : new[] { string.Empty };
+        }
+
+        var subInitials = token
+            .Split(Hyphens, StringSplitOptions.RemoveEmptyEntries)
+            .Select(Initial)
+            .Where(i => i.Length > 0)
+            .ToList();
+
+        return subInitials.Count switch
+        {
+            0 => new[] { string.Empty },
+            1 => new[] { subInitials[0] },
+            _ => new[] { subInitials[0], string.Concat(subInitials) },
+        };
+    }
+
+    private static string Initial(string token)
+    {
+        var folded = Fold(token);
+        return folded.Length == 0 ? string.Empty : char.ToUpperInvariant(folded[0]).ToString();
+    }
+
+    private static IReadOnlyList<string> Combine(IReadOnlyList<string> prefixes, IReadOnlyList<string> suffixes)
+    {
+        var combined = new List<string>(prefixes.Count * suffixes.Count);
+        foreach (var prefix in prefixes)
+        {
+            foreach (var suffix in suffixes)
+            {
+                combined.Add(prefix + suffix);
+            }
+        }
+
+        return combined;
     }
 
     private static string NormalizeInitials(string value)

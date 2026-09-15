@@ -22,6 +22,66 @@ internal static class Phase3DocxFixtureBuilder
     public const string ResultsBodyText = "Yields differed by genotype.";
     public const string TableNestedText = "TABLE 1. SAMPLE DATA";
 
+    // ----- Phase 3 SciELO Markup source (the docx DocxSourceReader pairs with an XML) -----
+
+    /// <summary>The <c>[doc]</c> header paragraph a SciELO Markup docx opens with (ADR-004 pairing keys).</summary>
+    public const string MarkupDocHeaderText =
+        "[doc sps=\"1.9\" acron=\"cbab\" volid=\"26\" issueno=\"3\" order=\"01\" " +
+        "elocatid=\"e56132631\" doctopic=\"oa\" language=\"en\"]" +
+        "[doi]10.1590/1984-70332026v26n3a1[/doi]";
+
+    public const string MarkupDoi = "10.1590/1984-70332026v26n3a1";
+    public const string CreditStatementHeaderText = "CREDIT STATEMENT";
+    public const string ReferencesTagText = "[refs][sectitle]REFERENCES[/sectitle]";
+
+    /// <summary>
+    /// The CBAB v26n3 layout (5536 + 5501 shapes): the CREDIT body paragraph is
+    /// <c>[p]</c>-tagged and uses <c>;</c> both between terms and between author
+    /// entries (ADR-003).
+    /// </summary>
+    public const string ParagraphTaggedSemicolonCreditText =
+        "[p]ABC; DEF: Conceptualization; Methodology. GHI: Software.[/p]";
+
+    /// <summary>
+    /// Writes a minimal SciELO Markup docx: the <c>[doc]</c> header, a bold
+    /// <c>CREDIT STATEMENT</c> section heading, one body paragraph
+    /// (<paramref name="creditParagraphText"/>, verbatim), and the <c>[refs]</c>
+    /// tag that ends the trailing sections.
+    /// </summary>
+    public static void WriteMarkupDocxWithCreditStatement(string path, string creditParagraphText)
+        => WriteMarkupDocxWithCreditStatement(path, creditParagraphText, MarkupElocationId, MarkupDoi);
+
+    public const string MarkupElocationId = "e56132631";
+
+    /// <summary>
+    /// Same as <see cref="WriteMarkupDocxWithCreditStatement(string, string)"/> with
+    /// explicit pairing keys, so a test can stage several distinct articles in one
+    /// package (ADR-004 pairing rejects two docx with the same elocation id).
+    /// </summary>
+    public static void WriteMarkupDocxWithCreditStatement(
+        string path,
+        string creditParagraphText,
+        string elocationId,
+        string doi)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        ArgumentNullException.ThrowIfNull(creditParagraphText);
+        ArgumentException.ThrowIfNullOrEmpty(elocationId);
+        ArgumentException.ThrowIfNullOrEmpty(doi);
+
+        var header = MarkupDocHeaderText
+            .Replace($"elocatid=\"{MarkupElocationId}\"", $"elocatid=\"{elocationId}\"", StringComparison.Ordinal)
+            .Replace($"[doi]{MarkupDoi}[/doi]", $"[doi]{doi}[/doi]", StringComparison.Ordinal);
+
+        using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
+        var mainPart = doc.AddMainDocumentPart();
+        mainPart.Document = new Document(new Body(
+            BuildParagraph(header),
+            BuildSectionParagraph(CreditStatementHeaderText),
+            BuildParagraph(creditParagraphText),
+            BuildParagraph(ReferencesTagText)));
+    }
+
     public static void WritePhase123HappyPathDocx(string path)
         => WriteFullPipelineFixture(path, includeIntroductionAnchor: true);
 

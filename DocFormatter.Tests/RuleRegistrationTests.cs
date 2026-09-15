@@ -149,7 +149,7 @@ public sealed class RuleRegistrationTests
     }
 
     [Fact]
-    public void AddPhase3Injectors_RegistersFourInjectorsInRunOrder()
+    public void AddPhase3Injectors_RegistersFiveInjectorsInRunOrder()
     {
         var services = new ServiceCollection();
 
@@ -164,6 +164,7 @@ public sealed class RuleRegistrationTests
                 typeof(OtherIdInjector),
                 typeof(EditedByInjector),
                 typeof(DataAvailabilityInjector),
+                typeof(ContribNamesInjector),
                 typeof(CreditRolesInjector),
             },
             injectorTypes);
@@ -180,7 +181,7 @@ public sealed class RuleRegistrationTests
             .Where(d => d.ServiceType == typeof(IJatsInjector))
             .ToArray();
 
-        Assert.Equal(4, descriptors.Length);
+        Assert.Equal(5, descriptors.Length);
         Assert.All(descriptors, d => Assert.Equal(ServiceLifetime.Transient, d.Lifetime));
     }
 

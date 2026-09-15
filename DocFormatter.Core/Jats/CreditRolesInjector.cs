@@ -15,7 +15,8 @@ namespace DocFormatter.Core.Jats;
 /// author resolves uniquely; otherwise — free prose, an unrecognized term, or an
 /// unresolved author — a <see cref="Proposal"/> is sent to the
 /// <see cref="IConfirmer"/> gate and only the operator-confirmed subset is written
-/// (ADR-005).
+/// (ADR-005). Whatever the path, the structured result is recorded as
+/// <see cref="Phase3Context.Credit"/> for the diagnostic and the batch summary.
 /// </summary>
 /// <remarks>
 /// Severity is <see cref="RuleSeverity.Optional"/>: the CREDIT statement is
@@ -37,6 +38,7 @@ public sealed class CreditRolesInjector : IJatsInjector
     private const string RoleName = "role";
     private const string ContentTypeAttribute = "content-type";
 
+    /// <summary>The applied-author set of a path that wrote nothing (skipped).</summary>
     /// <inheritdoc />
     public string Name => "credit-roles";
 
@@ -50,11 +52,21 @@ public sealed class CreditRolesInjector : IJatsInjector
         ArgumentNullException.ThrowIfNull(report);
 
         // The CREDIT statement is author-supplied; an absent section is a valid
-        // downstream-reportable state, not an error (DocxSource contract).
+        // downstream-reportable state, not an error (DocxSource contract). A
+        // present header with an emptied body, however, is a statement the
+        // operator expects to see — never drop it silently (INV-02, ADR-003).
         var raw = ctx.Source.CreditStatementRaw;
         if (string.IsNullOrWhiteSpace(raw))
         {
+            if (ctx.Source.CreditHeaderFound)
+            {
+                report.Warn(Name, "CREDIT STATEMENT header found but the body is empty; nothing to apply.");
+                ctx.Credit = EmptyOutcome(CreditDisposition.HeaderEmpty);
+                return;
+            }
+
             report.Info(Name, "No CREDIT statement on the docx source; skipped.");
+            ctx.Credit = EmptyOutcome(CreditDisposition.Absent);
             return;
         }
 
@@ -71,6 +83,7 @@ public sealed class CreditRolesInjector : IJatsInjector
                 AllowsOverride = false,
             });
             report.Warn(Name, $"CREDIT statement is free prose; roles not auto-applied ({result.Disposition}).");
+            ctx.Credit = new CreditOutcome(raw, CreditShape.Prose, Array.Empty<CreditEntryOutcome>(), CreditDisposition.Prose);
             return;
         }
 
@@ -81,7 +94,8 @@ public sealed class CreditRolesInjector : IJatsInjector
         // confidence gate is satisfied, so apply without prompting (ADR-001/005).
         if (unknownTerms.Count == 0 && unresolvedAuthors.Count == 0)
         {
-            Emit(plan, report, ConfirmDisposition.AutoApplied);
+            var applied = Emit(plan, report, ConfirmDisposition.AutoApplied);
+            ctx.Credit = BuildOutcome(raw, statement.Shape, plan, applied, CreditDisposition.AutoApplied);
             return;
         }
 
@@ -96,17 +110,61 @@ public sealed class CreditRolesInjector : IJatsInjector
         if (confirm.Disposition == ConfirmDisposition.Skipped)
         {
             report.Warn(Name, $"CRediT roles not applied ({reason}).");
+            ctx.Credit = BuildOutcome(raw, statement.Shape, plan, new EmitResult(), CreditDisposition.Skipped);
             return;
         }
 
         if (confirm.Disposition == ConfirmDisposition.FreeText)
         {
-            EmitFreeText(plan, report, unresolvedAuthors);
+            var placed = EmitFreeText(plan, report, unresolvedAuthors);
+            ctx.Credit = BuildOutcome(raw, statement.Shape, plan, placed, CreditDisposition.FreeText);
             return;
         }
 
-        Emit(plan.Where(p => p.IsClean).ToList(), report, confirm.Disposition);
+        var confirmed = Emit(plan.Where(p => p.IsClean).ToList(), report, confirm.Disposition);
         report.Warn(Name, $"Unresolved CRediT left for manual handling ({reason}).");
+        ctx.Credit = BuildOutcome(raw, statement.Shape, plan, confirmed, CreditDisposition.Confirmed);
+    }
+
+    /// <summary>An outcome with no body to parse (header-empty or absent).</summary>
+    private static CreditOutcome EmptyOutcome(string disposition)
+        => new(Raw: null, CreditShape.Prose, Array.Empty<CreditEntryOutcome>(), disposition);
+
+    /// <summary>
+    /// Projects the plan onto the <see cref="CreditOutcome"/> recorded on the
+    /// context (ADR-005): one entry per parsed author, in statement order, marked
+    /// <see cref="CreditEntryOutcome.Applied"/> only when this run wrote roles for
+    /// it and <see cref="CreditEntryOutcome.AlreadyPresent"/> when the idempotency
+    /// check skipped it (<paramref name="emitted"/>, keyed by author key).
+    /// </summary>
+    private static CreditOutcome BuildOutcome(
+        string raw,
+        CreditShape shape,
+        IReadOnlyList<PlanItem> plan,
+        EmitResult emitted,
+        string disposition)
+    {
+        var entries = plan
+            .Select(item => new CreditEntryOutcome(
+                item.AuthorKey,
+                item.WrittenTerms,
+                CreditResolution.From(item.Status),
+                item.UnknownTerms,
+                emitted.Applied.Contains(item.AuthorKey),
+                emitted.AlreadyPresent.Contains(item.AuthorKey)))
+            .ToList();
+        return new CreditOutcome(raw, shape, entries, disposition);
+    }
+
+    /// <summary>
+    /// What an emit pass did per author key: roles written this run, or skipped
+    /// because the <c>&lt;contrib&gt;</c> already carried a <c>&lt;role&gt;</c>.
+    /// </summary>
+    private sealed class EmitResult
+    {
+        public HashSet<string> Applied { get; } = new(StringComparer.Ordinal);
+
+        public HashSet<string> AlreadyPresent { get; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -134,7 +192,7 @@ public sealed class CreditRolesInjector : IJatsInjector
             }
 
             var roles = new List<CreditRole>();
-            var allTermsMapped = true;
+            var entryUnknownTerms = new List<string>();
             foreach (var term in entry.Terms)
             {
                 if (CreditTermTable.TryMap(term, out var role))
@@ -146,17 +204,25 @@ public sealed class CreditRolesInjector : IJatsInjector
                 }
                 else
                 {
-                    unknownTerms.Add(term);
-                    allTermsMapped = false;
+                    entryUnknownTerms.Add(term);
                 }
             }
+
+            unknownTerms.AddRange(entryUnknownTerms);
 
             // "Clean" means the author resolved AND every written term mapped — not
             // roles.Count == Terms.Count, which wrongly flags a duplicate-spelling
             // term (e.g. hyphen vs en-dash) as unclean because the two terms collapse
             // to one URL, silently dropping an otherwise auto-applicable author.
-            var isClean = resolution.Status == ResolveStatus.Resolved && allTermsMapped;
-            plan.Add(new PlanItem(entry.AuthorKey, resolution.Contrib, roles, entry.Terms, isClean));
+            var isClean = resolution.Status == ResolveStatus.Resolved && entryUnknownTerms.Count == 0;
+            plan.Add(new PlanItem(
+                entry.AuthorKey,
+                resolution.Contrib,
+                resolution.Status,
+                roles,
+                entry.Terms,
+                entryUnknownTerms,
+                isClean));
         }
 
         return plan;
@@ -165,10 +231,11 @@ public sealed class CreditRolesInjector : IJatsInjector
     /// <summary>
     /// Writes the roles for each clean plan item, skipping a contributor that
     /// already carries any <c>&lt;role&gt;</c> (idempotency, ADR-005) and reporting
-    /// every disposition.
+    /// every disposition. Returns the author keys that received roles in this run.
     /// </summary>
-    private void Emit(IReadOnlyList<PlanItem> plan, IReport report, ConfirmDisposition disposition)
+    private EmitResult Emit(IReadOnlyList<PlanItem> plan, IReport report, ConfirmDisposition disposition)
     {
+        var result = new EmitResult();
         foreach (var item in plan)
         {
             if (!item.IsClean || item.Contrib is null || item.Roles.Count == 0)
@@ -179,13 +246,17 @@ public sealed class CreditRolesInjector : IJatsInjector
             if (item.Contrib.Elements().Any(e => e.Name.LocalName == RoleName))
             {
                 report.Info(Name, $"<{ContribName}> for '{item.AuthorKey}' already has <{RoleName}>; skipped.");
+                result.AlreadyPresent.Add(item.AuthorKey);
                 continue;
             }
 
             EmitRoles(item.Contrib, item.Roles);
+            result.Applied.Add(item.AuthorKey);
             var applied = string.Join(", ", item.Roles.Select(r => r.Display));
             report.Info(Name, $"Injected {item.Roles.Count} <{RoleName}> for '{item.AuthorKey}' ({disposition}): {applied}.");
         }
+
+        return result;
     }
 
     /// <summary>
@@ -197,12 +268,14 @@ public sealed class CreditRolesInjector : IJatsInjector
     /// <c>&lt;role&gt;</c> is skipped). Authors that did not resolve cannot be
     /// placed (e.g. a key that matches a <c>&lt;suffix&gt;</c> rather than a
     /// <c>&lt;surname&gt;</c>); they are reported, never silently dropped.
+    /// Returns the author keys that received roles in this run.
     /// </summary>
-    private void EmitFreeText(
+    private EmitResult EmitFreeText(
         IReadOnlyList<PlanItem> plan,
         IReport report,
         IReadOnlyList<string> unresolvedAuthors)
     {
+        var result = new EmitResult();
         foreach (var item in plan)
         {
             if (item.Contrib is null || item.WrittenTerms.Count == 0)
@@ -213,10 +286,12 @@ public sealed class CreditRolesInjector : IJatsInjector
             if (item.Contrib.Elements().Any(e => e.Name.LocalName == RoleName))
             {
                 report.Info(Name, $"<{ContribName}> for '{item.AuthorKey}' already has <{RoleName}>; skipped.");
+                result.AlreadyPresent.Add(item.AuthorKey);
                 continue;
             }
 
             EmitRoles(item.Contrib, item.WrittenTerms.Select(t => new CreditRole(t, ContentTypeUrl: null)).ToList());
+            result.Applied.Add(item.AuthorKey);
             var applied = string.Join(", ", item.WrittenTerms);
             report.Info(
                 Name,
@@ -234,6 +309,8 @@ public sealed class CreditRolesInjector : IJatsInjector
                 $"Free-text roles emitted; {unresolvedAuthors.Count} author(s) unresolved and not placed: "
                     + $"{string.Join(", ", unresolvedAuthors)}.");
         }
+
+        return result;
     }
 
     /// <summary>
@@ -306,7 +383,9 @@ public sealed class CreditRolesInjector : IJatsInjector
     private sealed record PlanItem(
         string AuthorKey,
         XElement? Contrib,
+        ResolveStatus Status,
         IReadOnlyList<CreditRole> Roles,
         IReadOnlyList<string> WrittenTerms,
+        IReadOnlyList<string> UnknownTerms,
         bool IsClean);
 }

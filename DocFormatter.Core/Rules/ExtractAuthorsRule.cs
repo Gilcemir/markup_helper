@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using DocFormatter.Core.Models;
@@ -106,7 +107,7 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
             switch (child)
             {
                 case Run run:
-                    AppendRunTokens(run, tokens);
+                    AppendRunTokens(run, tokens, report);
                     break;
                 case Hyperlink hyperlink:
                     AppendHyperlinkTokens(hyperlink, paragraph, mainPart, tokens, hyperlinksToRemove, relationshipsToDelete, report);
@@ -117,7 +118,7 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
         return tokens;
     }
 
-    private static void AppendRunTokens(Run run, List<Token> tokens)
+    private void AppendRunTokens(Run run, List<Token> tokens, IReport report)
     {
         var text = GetRunText(run);
         if (text.Length == 0)
@@ -140,7 +141,36 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
             return;
         }
 
-        tokens.Add(new Token(TokenKind.Text, text));
+        AppendPlainTextTokens(text, tokens, report);
+    }
+
+    // A byline may carry the ORCID as plain text (ORCID's display guidelines allow
+    // the bare URI). Left in the name buffer it reaches SciELO Markup as the last
+    // name token and mark_authors promotes it to <surname> (CBAB 5316, all seven
+    // authors). Emit it as an Orcid token between the surrounding Text tokens so
+    // the consume pass attaches it to the current author exactly like a hyperlink
+    // ORCID (credit-corpus-v26n3-fixes ADR-006). No leading word boundary: the
+    // corpus glues the id to the surname ("Bruzi0000-0001-…").
+    private void AppendPlainTextTokens(string text, List<Token> tokens, IReport report)
+    {
+        var cursor = 0;
+        foreach (Match match in PlainOrcidRegex().Matches(text))
+        {
+            if (match.Index > cursor)
+            {
+                tokens.Add(new Token(TokenKind.Text, text[cursor..match.Index]));
+            }
+
+            var orcidId = match.Groups["id"].Value;
+            report.Info(Name, $"extracted ORCID '{orcidId}' from plain text");
+            tokens.Add(new Token(TokenKind.Orcid, orcidId));
+            cursor = match.Index + match.Length;
+        }
+
+        if (cursor < text.Length)
+        {
+            tokens.Add(new Token(TokenKind.Text, text[cursor..]));
+        }
     }
 
     private void AppendHyperlinkTokens(
@@ -223,12 +253,30 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
                     break;
                 case TokenKind.Orcid:
                     FlushBuffer(buffer, builders);
-                    builders[^1].OrcidId ??= token.Value;
+                    AttachOrcid(builders[^1], token.Value);
                     break;
             }
         }
 
         FlushBuffer(buffer, builders);
+    }
+
+    // The first ORCID seen for an author wins (a hyperlink and its plain-text
+    // caption normally agree). A second, different id is a byline defect the
+    // operator must look at, so it is warned without lowering confidence: the name
+    // itself is intact.
+    private static void AttachOrcid(AuthorBuilder builder, string orcidId)
+    {
+        if (builder.OrcidId is null)
+        {
+            builder.OrcidId = orcidId;
+            return;
+        }
+
+        if (!string.Equals(builder.OrcidId, orcidId, StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Warn($"conflicting ORCID '{orcidId}' ignored; keeping '{builder.OrcidId}'");
+        }
     }
 
     private void FlushBuffer(StringBuilder buffer, List<AuthorBuilder> builders)
@@ -346,7 +394,48 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
                     $"possible incorrect split: trailing fragment '{name}' looks like a name suffix (Jr/Sr/II/III/IV) for '{previousName}'");
                 builder.MarkLow($"name fragment '{name}' looks like a name suffix (Jr/Sr/II/III/IV)");
             }
+
+            WarnOnRepeatedLastToken(builder, name);
         }
+    }
+
+    // SciELO Markup's markup_surname_and_fname takes the last token as the surname
+    // and then tags its FIRST occurrence in the range (find_text_in_range), so a
+    // name whose last token repeats an earlier one ("Nguyen Hoai Nguyen", CBAB
+    // 5613) comes out as nested [fname][surname]…[/surname]…[/fname]. The name is
+    // correct, so confidence stays; the operator is told before Markup runs
+    // (credit-corpus-v26n3-fixes ADR-006).
+    private static void WarnOnRepeatedLastToken(AuthorBuilder builder, string name)
+    {
+        var tokens = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 2)
+        {
+            return;
+        }
+
+        var last = FoldName(tokens[^1]);
+        if (tokens[..^1].Any(t => FoldName(t) == last))
+        {
+            builder.Warn(
+                $"last name token '{tokens[^1]}' repeats an earlier token; "
+                + "SciELO Markup mark_authors will tag the first occurrence as the surname");
+        }
+    }
+
+    /// <summary>Lowercases and strips diacritics so name tokens compare equal across accents.</summary>
+    private static string FoldName(string value)
+    {
+        var decomposed = value.ToLowerInvariant().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        foreach (var c in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            {
+                builder.Append(c);
+            }
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC);
     }
 
     private void EmitAuthors(List<AuthorBuilder> builders, FormattingContext ctx, IReport report)
@@ -491,6 +580,14 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
     [GeneratedRegex(@"\p{L}", RegexOptions.CultureInvariant)]
     private static partial Regex AlphabeticRegex();
 
+    // Plain-text ORCID, optionally prefixed by the orcid.org URL. Unlike
+    // FormattingOptions.OrcidIdRegex there is no leading \b, so an id glued to the
+    // surname still matches; the trailing lookahead keeps a longer digit run out.
+    [GeneratedRegex(
+        @"(?:https?://(?:www\.)?orcid\.org/)?(?<id>\d{4}-\d{4}-\d{4}-\d{3}[\dX])(?![\dX])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PlainOrcidRegex();
+
     private enum TokenKind
     {
         Text,
@@ -558,5 +655,8 @@ public sealed partial class ExtractAuthorsRule : IFormattingRule
             Confidence = AuthorConfidence.Low;
             Warnings.Add(warning);
         }
+
+        /// <summary>Records a warning about the byline without lowering the name's confidence.</summary>
+        public void Warn(string warning) => Warnings.Add(warning);
     }
 }

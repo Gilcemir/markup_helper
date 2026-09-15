@@ -239,6 +239,300 @@ public sealed class CliPhase3Tests : IDisposable
         Assert.True(File.Exists(reportPath));
     }
 
+    [Fact]
+    public void Run_Phase3_SingleFile_UnresolvedAuthor_DiagnosticNamesTheAuthorAsNotFound()
+    {
+        // credit-corpus-v26n3-fixes ADR-005: the diagnostic carries the statement
+        // as read and each author's resolution, so a pending article is diagnosed
+        // without reopening the docx. "XYZ" matches no contributor → gated →
+        // WARN → diagnostic written with XYZ as notFound and ABC as resolved.
+        var root = Path.Combine(_tempDir, $"synthetic-{Guid.NewGuid():N}");
+        var markupDir = Path.Combine(root, "scielo_markup");
+        var packageDir = Path.Combine(root, "scielo_package");
+        Directory.CreateDirectory(markupDir);
+        Directory.CreateDirectory(packageDir);
+
+        const string xmlName = "1984-7033-cbab-26-03-e56132631.xml";
+        File.WriteAllText(Path.Combine(root, "other.txt"), "1984-7033-cbab-26-03-e56132631.pdf\t00301\n");
+        Fixtures.Phase3.Phase3DocxFixtureBuilder.WriteMarkupDocxWithCreditStatement(
+            Path.Combine(markupDir, "5613.docx"),
+            "ABC: Conceptualization; Methodology. XYZ: Software.");
+        File.WriteAllText(
+            Path.Combine(packageDir, xmlName),
+            "<article>\n" +
+            "\t<front>\n" +
+            "\t\t<article-meta>\n" +
+            $"\t\t\t<article-id pub-id-type=\"doi\">{Fixtures.Phase3.Phase3DocxFixtureBuilder.MarkupDoi}</article-id>\n" +
+            "\t\t\t<elocation-id>e56132631</elocation-id>\n" +
+            "\t\t\t<contrib-group>\n" +
+            "\t\t\t\t<contrib contrib-type=\"author\">\n" +
+            "\t\t\t\t\t<name><surname>Costa</surname><given-names>Ana Beatriz</given-names></name>\n" +
+            "\t\t\t\t</contrib>\n" +
+            "\t\t\t</contrib-group>\n" +
+            "\t\t</article-meta>\n" +
+            "\t</front>\n" +
+            "</article>\n");
+
+        var exit = CliApp.Run(
+            new[] { "phase3", Path.Combine(packageDir, xmlName), "--non-interactive=accept" },
+            new StringWriter(),
+            new StringWriter());
+
+        Assert.Equal(CliApp.ExitSuccess, exit);
+
+        var diagnosticPath = Path.Combine(packageDir, "formatted-phase3", "1984-7033-cbab-26-03-e56132631.diagnostic.json");
+        Assert.True(File.Exists(diagnosticPath), ".diagnostic.json");
+
+        using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(diagnosticPath));
+        var statement = json.RootElement.GetProperty("phase3").GetProperty("creditStatement");
+        Assert.Equal("ABC: Conceptualization; Methodology. XYZ: Software.", statement.GetProperty("raw").GetString());
+        Assert.Equal("authorKeyed", statement.GetProperty("shape").GetString());
+
+        var entries = statement.GetProperty("entries").EnumerateArray().ToList();
+        var abc = Assert.Single(entries, e => e.GetProperty("authorKey").GetString() == "ABC");
+        var xyz = Assert.Single(entries, e => e.GetProperty("authorKey").GetString() == "XYZ");
+        Assert.Equal("resolved", abc.GetProperty("resolution").GetString());
+        Assert.True(abc.GetProperty("applied").GetBoolean());
+        Assert.Equal("notFound", xyz.GetProperty("resolution").GetString());
+        Assert.False(xyz.GetProperty("applied").GetBoolean());
+    }
+
+    // ── batch summary pendency block (credit-corpus-v26n3-fixes) ─────────────
+
+    private static Phase3Outcome Processed(CreditOutcome? credit, int brokenNames = 0, bool prompted = false)
+        => new("art", Phase3OutcomeKind.Processed, prompted, null, credit, brokenNames);
+
+    private static CreditEntryOutcome Entry(
+        string key,
+        string resolution = CreditResolution.Resolved,
+        bool applied = true,
+        params string[] unknownTerms)
+        => new(key, new[] { "Data curation" }, resolution, unknownTerms, applied);
+
+    [Fact]
+    public void Phase3PendencyLines_AutoAppliedAndNoBrokenNames_IsEmpty()
+    {
+        var credit = new CreditOutcome("A: Data curation.", CreditShape.AuthorKeyed,
+            new[] { Entry("A") }, CreditDisposition.AutoApplied);
+
+        Assert.Empty(CliApp.Phase3PendencyLines(Processed(credit)));
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_ConfirmedWithNotFoundAuthor_ListsAppliedAndPending()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[] { Entry("TVB"), Entry("QHTP"), Entry("NHN", CreditResolution.NotFound, applied: false) },
+            CreditDisposition.Confirmed);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit, prompted: true)));
+        Assert.Equal("  credit: applied TVB, QHTP; pending NHN (notFound)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_UnknownTerm_NamesTheTerm()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[] { Entry("X", applied: false, unknownTerms: "Metodology") },
+            CreditDisposition.Confirmed);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit)));
+        Assert.Equal("  credit: applied none; pending X (unknown term: Metodology)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_NotFoundAndUnknownTerm_JoinsBothReasons()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[] { Entry("A"), Entry("Z", CreditResolution.NotFound, applied: false, "Q") },
+            CreditDisposition.Confirmed);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit)));
+        Assert.Equal("  credit: applied A; pending Z (notFound; unknown term: Q)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_SkippedByOperator_ReasonIsTheDisposition()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[] { Entry("A", applied: false), Entry("B", CreditResolution.Ambiguous, applied: false) },
+            CreditDisposition.Skipped);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit, prompted: true)));
+        Assert.Equal("  credit: applied none; pending A (skipped), B (ambiguous)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_Prose_HeaderEmpty_Absent_HaveFixedWording()
+    {
+        static CreditOutcome Outcome(string disposition) =>
+            new("raw", CreditShape.Prose, Array.Empty<CreditEntryOutcome>(), disposition);
+
+        Assert.Equal("  credit: free prose (not auto-applied)",
+            Assert.Single(CliApp.Phase3PendencyLines(Processed(Outcome(CreditDisposition.Prose)))));
+        Assert.Equal("  credit: header found, body empty",
+            Assert.Single(CliApp.Phase3PendencyLines(Processed(Outcome(CreditDisposition.HeaderEmpty)))));
+        Assert.Equal("  credit: no CREDIT STATEMENT on the docx",
+            Assert.Single(CliApp.Phase3PendencyLines(Processed(Outcome(CreditDisposition.Absent)))));
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_AlreadyPresentAuthors_AreListedApartAndNotPending()
+    {
+        // Re-run over an already-injected XML: six contributors skipped by the
+        // idempotency check, one still unresolved (5719 shape on task_09's copy).
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[]
+            {
+                new CreditEntryOutcome("LRS", new[] { "Data curation" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                new CreditEntryOutcome("GFPA", new[] { "Methodology" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                Entry("MRC", CreditResolution.NotFound, applied: false),
+            },
+            CreditDisposition.Confirmed);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit, prompted: true)));
+        Assert.Equal("  credit: already present LRS, GFPA; pending MRC (notFound)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_AppliedAndAlreadyPresent_BothListedBeforePending()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[]
+            {
+                Entry("A"),
+                new CreditEntryOutcome("B", new[] { "Software" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                Entry("C", CreditResolution.Ambiguous, applied: false),
+            },
+            CreditDisposition.Confirmed);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit)));
+        Assert.Equal("  credit: applied A; already present B; pending C (ambiguous)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_BrokenNames_AppendsCountAfterCreditLine()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[] { Entry("PSA"), Entry("MAF", CreditResolution.NotFound, applied: false) },
+            CreditDisposition.Confirmed);
+
+        var lines = CliApp.Phase3PendencyLines(Processed(credit, brokenNames: 7, prompted: true));
+
+        Assert.Equal(
+            new[] { "  credit: applied PSA; pending MAF (notFound)", "  contrib-names: 7 broken surname(s)" },
+            lines);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_AutoAppliedWithBrokenNames_OnlyContribNamesLine()
+    {
+        var credit = new CreditOutcome("...", CreditShape.AuthorKeyed,
+            new[] { Entry("A") }, CreditDisposition.AutoApplied);
+
+        var line = Assert.Single(CliApp.Phase3PendencyLines(Processed(credit, brokenNames: 1)));
+        Assert.Equal("  contrib-names: 1 broken surname(s)", line);
+    }
+
+    [Fact]
+    public void Phase3PendencyLines_SkippedOrFailedOutcome_IsEmpty()
+    {
+        var credit = new CreditOutcome("...", CreditShape.Prose, Array.Empty<CreditEntryOutcome>(), CreditDisposition.Prose);
+
+        Assert.Empty(CliApp.Phase3PendencyLines(new Phase3Outcome("a", Phase3OutcomeKind.Skipped, false, "no docx", credit, 3)));
+        Assert.Empty(CliApp.Phase3PendencyLines(new Phase3Outcome("b", Phase3OutcomeKind.Failed, true, "boom", credit, 3)));
+    }
+
+    [Fact]
+    public void WritePhase3BatchSummary_KeepsHeaderAndFileLines_AndIndentsPendencyUnderTheirFile()
+    {
+        var clean = new Phase3Outcome("clean", Phase3OutcomeKind.Processed, false, null,
+            new CreditOutcome("A: Data curation.", CreditShape.AuthorKeyed, new[] { Entry("A") }, CreditDisposition.AutoApplied));
+        var pending = new Phase3Outcome("pending", Phase3OutcomeKind.Processed, true, null,
+            new CreditOutcome("...", CreditShape.AuthorKeyed,
+                new[] { Entry("A"), Entry("NHN", CreditResolution.NotFound, applied: false) }, CreditDisposition.Confirmed),
+            BrokenNames: 1);
+        var skipped = new Phase3Outcome("orphan", Phase3OutcomeKind.Skipped, false, "no docx pairs");
+
+        var path = Path.Combine(_tempDir, "_batch_summary.txt");
+        CliApp.WritePhase3BatchSummary(path, new[] { clean, pending, skipped });
+
+        Assert.Equal(
+            new[]
+            {
+                "processed=2 prompted=1 skipped=1 failed=0",
+                "clean.xml ✓",
+                "pending.xml ✓ prompted",
+                "  credit: applied A; pending NHN (notFound)",
+                "  contrib-names: 1 broken surname(s)",
+                "orphan.xml ⤼ skipped no docx pairs",
+            },
+            File.ReadAllLines(path));
+    }
+
+    [Fact]
+    public void Run_Phase3_Batch_CleanAndPendingArticles_SummaryHasBlockOnlyUnderThePendingOne()
+    {
+        var root = Path.Combine(_tempDir, $"synthetic-batch-{Guid.NewGuid():N}");
+        var markupDir = Path.Combine(root, "scielo_markup");
+        var packageDir = Path.Combine(root, "scielo_package");
+        Directory.CreateDirectory(markupDir);
+        Directory.CreateDirectory(packageDir);
+
+        const string cleanBase = "1984-7033-cbab-26-03-e10000001";
+        const string pendingBase = "1984-7033-cbab-26-03-e20000002";
+        File.WriteAllText(
+            Path.Combine(root, "other.txt"),
+            $"{cleanBase}.pdf\t00001\n{pendingBase}.pdf\t00002\n");
+
+        Fixtures.Phase3.Phase3DocxFixtureBuilder.WriteMarkupDocxWithCreditStatement(
+            Path.Combine(markupDir, "clean.docx"), "ABC: Conceptualization; Methodology.",
+            "e10000001", "10.1590/clean");
+        Fixtures.Phase3.Phase3DocxFixtureBuilder.WriteMarkupDocxWithCreditStatement(
+            Path.Combine(markupDir, "pending.docx"), "ABC: Conceptualization. XYZ: Software.",
+            "e20000002", "10.1590/pending");
+
+        File.WriteAllText(Path.Combine(packageDir, $"{cleanBase}.xml"),
+            SyntheticArticle("10.1590/clean", "e10000001", surname: "Costa", givenNames: "Ana Beatriz"));
+        File.WriteAllText(Path.Combine(packageDir, $"{pendingBase}.xml"),
+            // 5316 mechanism: the ORCID landed in <surname> and the full name in
+            // <given-names>, so "ABC" still resolves through the given-only tier.
+            SyntheticArticle("10.1590/pending", "e20000002", surname: "0000-0001-2345-6789", givenNames: "Ana Beatriz Costa"));
+
+        var exit = CliApp.Run(
+            new[] { "phase3", packageDir, "--non-interactive=accept" }, new StringWriter(), new StringWriter());
+
+        Assert.Equal(CliApp.ExitSuccess, exit);
+        var summary = File.ReadAllLines(Path.Combine(packageDir, "formatted-phase3", "_batch_summary.txt"));
+        Assert.Equal(
+            new[]
+            {
+                "processed=2 prompted=1 skipped=0 failed=0",
+                $"{cleanBase}.xml ✓",
+                $"{pendingBase}.xml ✓ prompted",
+                "  credit: applied ABC; pending XYZ (notFound)",
+                "  contrib-names: 1 broken surname(s)",
+            },
+            summary);
+    }
+
+    // A minimal JATS article with the DOI the other-id injector anchors on, the
+    // elocation-id the pairer matches, and one contributor.
+    private static string SyntheticArticle(string doi, string elocationId, string surname, string givenNames)
+        => "<article>\n" +
+           "\t<front>\n" +
+           "\t\t<article-meta>\n" +
+           $"\t\t\t<article-id pub-id-type=\"doi\">{doi}</article-id>\n" +
+           $"\t\t\t<elocation-id>{elocationId}</elocation-id>\n" +
+           "\t\t\t<contrib-group>\n" +
+           "\t\t\t\t<contrib contrib-type=\"author\">\n" +
+           $"\t\t\t\t\t<name><surname>{surname}</surname><given-names>{givenNames}</given-names></name>\n" +
+           "\t\t\t\t</contrib>\n" +
+           "\t\t\t</contrib-group>\n" +
+           "\t\t</article-meta>\n" +
+           "\t</front>\n" +
+           "</article>\n";
+
     // Copies the corpus other.txt + all docx + the named XMLs into a temp layout
     // (root/{other.txt, scielo_markup/, scielo_package/}) so the CLI's walk-up
     // layout resolution finds them, leaving the repo corpus untouched.

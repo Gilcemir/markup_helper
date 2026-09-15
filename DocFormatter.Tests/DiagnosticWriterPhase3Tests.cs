@@ -68,7 +68,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         report.Warn("phase3", "synthetic gate trigger");
 
         var doc = DiagnosticWriter.BuildPhase3Document(
-            "x.xml", xml, report, EmptyDispositions(), FixedTime);
+            "x.xml", xml, report, EmptyDispositions(), null, FixedTime);
 
         Assert.NotNull(doc.Phase3);
         Assert.Equal(("other-id", "00201", "autoApplied"), Tuple(doc.Phase3!.OtherId));
@@ -84,7 +84,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         var report = new Report();
         report.Warn("phase3", "gate");
 
-        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), FixedTime);
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), null, FixedTime);
 
         Assert.Equal("10.1590/x", doc.Fields.Doi.Value);
         Assert.Equal("e54492621", doc.Fields.Elocation.Value);
@@ -107,7 +107,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
             ["data-availability"] = ConfirmDisposition.Overridden,
         };
 
-        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, recorded, FixedTime);
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, recorded, null, FixedTime);
 
         Assert.Equal("overridden", doc.Phase3!.DataAvailability.Disposition);
     }
@@ -126,7 +126,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
             ["credit-roles"] = ConfirmDisposition.AutoApplied,
         };
 
-        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, recorded, FixedTime);
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, recorded, null, FixedTime);
 
         Assert.Equal(("credit-roles", null, "skipped"), Tuple(doc.Phase3!.CreditRoles));
     }
@@ -152,7 +152,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
             ["credit-roles"] = ConfirmDisposition.FreeText,
         };
 
-        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, recorded, FixedTime);
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, recorded, null, FixedTime);
 
         Assert.Equal("freeText", doc.Phase3!.CreditRoles.Disposition);
     }
@@ -175,7 +175,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         };
 
         var path = Path.Combine(_tempDir, "freetext.diagnostic.json");
-        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, recorded);
+        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, recorded, null);
 
         Assert.True(written);
         using var json = JsonDocument.Parse(File.ReadAllText(path));
@@ -192,7 +192,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         report.Info("edited-by", "No responsible editor on the docx source; skipped.");
         report.Warn("phase3", "gate");
 
-        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), FixedTime);
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), null, FixedTime);
 
         Assert.Equal("skipped", doc.Phase3!.OtherId.Disposition);
         Assert.Equal("absent", doc.Phase3.EditedBy.Disposition);
@@ -205,7 +205,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         var report = new Report();
         report.Error("other-id", "No <article-id pub-id-type=\"doi\"> to anchor the other id.");
 
-        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), FixedTime);
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), null, FixedTime);
 
         Assert.Equal("failed", doc.Phase3!.OtherId.Disposition);
         Assert.Equal("error", doc.Status);
@@ -219,7 +219,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         report.Info("other-id", "Inserted ... after the DOI.");
 
         var path = Path.Combine(_tempDir, "info-only.diagnostic.json");
-        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions());
+        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions(), null);
 
         Assert.False(written);
         Assert.False(File.Exists(path));
@@ -234,7 +234,7 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         report.Warn("credit-roles", "CREDIT statement is free prose; roles not auto-applied (AutoApplied).");
 
         var path = Path.Combine(_tempDir, "warn.diagnostic.json");
-        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions());
+        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions(), null);
 
         Assert.True(written);
         using var json = JsonDocument.Parse(File.ReadAllText(path));
@@ -242,6 +242,166 @@ public sealed class DiagnosticWriterPhase3Tests : IDisposable
         Assert.Equal("other-id", phase3.GetProperty("otherId").GetProperty("tag").GetString());
         Assert.Equal("00201", phase3.GetProperty("otherId").GetProperty("value").GetString());
         Assert.Equal("autoApplied", phase3.GetProperty("otherId").GetProperty("disposition").GetString());
+    }
+
+    // ── phase3.creditStatement (credit-corpus-v26n3-fixes ADR-005) ──────────
+
+    private static CreditOutcome TwoEntryOutcome() => new(
+        Raw: "TVB: Data curation, Formal analysis; NHN: Conceptualization, Metodology.",
+        Shape: CreditShape.AuthorKeyed,
+        Entries: new[]
+        {
+            new CreditEntryOutcome(
+                "TVB",
+                new[] { "Data curation", "Formal analysis" },
+                CreditResolution.Resolved,
+                Array.Empty<string>(),
+                Applied: true),
+            new CreditEntryOutcome(
+                "NHN",
+                new[] { "Conceptualization", "Metodology" },
+                CreditResolution.NotFound,
+                new[] { "Metodology" },
+                Applied: false),
+        },
+        Disposition: CreditDisposition.Confirmed);
+
+    [Fact]
+    public void BuildPhase3Document_WithCreditOutcome_MirrorsRawShapeAndEntries()
+    {
+        var xml = FullyInjectedXml();
+        var report = new Report();
+        report.Warn("credit-roles", "Unresolved CRediT left for manual handling (unresolved author(s): NHN (NotFound)).");
+
+        var doc = DiagnosticWriter.BuildPhase3Document(
+            "x.xml", xml, report, EmptyDispositions(), TwoEntryOutcome(), FixedTime);
+
+        var statement = doc.Phase3!.CreditStatement;
+        Assert.NotNull(statement);
+        Assert.Equal("TVB: Data curation, Formal analysis; NHN: Conceptualization, Metodology.", statement!.Raw);
+        Assert.Equal("authorKeyed", statement.Shape);
+        Assert.Collection(
+            statement.Entries,
+            tvb =>
+            {
+                Assert.Equal("TVB", tvb.AuthorKey);
+                Assert.Equal(new[] { "Data curation", "Formal analysis" }, tvb.Terms);
+                Assert.Equal(CreditResolution.Resolved, tvb.Resolution);
+                Assert.Empty(tvb.UnknownTerms);
+                Assert.True(tvb.Applied);
+            },
+            nhn =>
+            {
+                Assert.Equal("NHN", nhn.AuthorKey);
+                Assert.Equal(CreditResolution.NotFound, nhn.Resolution);
+                Assert.Equal(new[] { "Metodology" }, nhn.UnknownTerms);
+                Assert.False(nhn.Applied);
+            });
+    }
+
+    [Fact]
+    public void WritePhase3_WithCreditOutcome_WritesCamelCaseCreditStatementBlock()
+    {
+        var xml = FullyInjectedXml();
+        var report = new Report();
+        report.Warn("credit-roles", "Unresolved CRediT left for manual handling (unresolved author(s): NHN (NotFound)).");
+
+        var path = Path.Combine(_tempDir, "credit.diagnostic.json");
+        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions(), TwoEntryOutcome());
+
+        Assert.True(written);
+        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        var statement = json.RootElement.GetProperty("phase3").GetProperty("creditStatement");
+        Assert.StartsWith("TVB: Data curation", statement.GetProperty("raw").GetString());
+        Assert.Equal("authorKeyed", statement.GetProperty("shape").GetString());
+
+        var entries = statement.GetProperty("entries");
+        Assert.Equal(2, entries.GetArrayLength());
+        Assert.Equal("TVB", entries[0].GetProperty("authorKey").GetString());
+        Assert.Equal("resolved", entries[0].GetProperty("resolution").GetString());
+        Assert.True(entries[0].GetProperty("applied").GetBoolean());
+        Assert.Equal("NHN", entries[1].GetProperty("authorKey").GetString());
+        Assert.Equal("notFound", entries[1].GetProperty("resolution").GetString());
+        Assert.False(entries[1].GetProperty("applied").GetBoolean());
+        Assert.Equal("Metodology", entries[1].GetProperty("unknownTerms")[0].GetString());
+    }
+
+    [Fact]
+    public void WritePhase3_AlreadyPresentEntry_SerializesTheFlag()
+    {
+        var xml = FullyInjectedXml();
+        var report = new Report();
+        report.Warn("credit-roles", "Unresolved CRediT left for manual handling (unresolved author(s): MRC (NotFound)).");
+        var outcome = new CreditOutcome("LRS: Data curation. MRC: Funding acquisition.", CreditShape.AuthorKeyed,
+            new[]
+            {
+                new CreditEntryOutcome("LRS", new[] { "Data curation" }, CreditResolution.Resolved, Array.Empty<string>(), Applied: false, AlreadyPresent: true),
+                new CreditEntryOutcome("MRC", new[] { "Funding acquisition" }, CreditResolution.NotFound, Array.Empty<string>(), Applied: false),
+            },
+            CreditDisposition.Confirmed);
+
+        var path = Path.Combine(_tempDir, "already-present.diagnostic.json");
+        Assert.True(DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions(), outcome));
+
+        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        var entries = json.RootElement.GetProperty("phase3").GetProperty("creditStatement").GetProperty("entries");
+        Assert.True(entries[0].GetProperty("alreadyPresent").GetBoolean());
+        Assert.False(entries[0].GetProperty("applied").GetBoolean());
+        Assert.False(entries[1].GetProperty("alreadyPresent").GetBoolean());
+    }
+
+    [Fact]
+    public void BuildPhase3Document_ProseOutcome_HasProseShapeEmptyEntriesAndRaw()
+    {
+        var xml = new XDocument(new XElement("article", new XElement("front")));
+        var report = new Report();
+        report.Warn("credit-roles", "CREDIT statement is free prose; roles not auto-applied (AutoApplied).");
+        var prose = new CreditOutcome(
+            "All authors contributed to the study's conception and design.",
+            CreditShape.Prose,
+            Array.Empty<CreditEntryOutcome>(),
+            CreditDisposition.Prose);
+
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), prose, FixedTime);
+
+        var statement = doc.Phase3!.CreditStatement;
+        Assert.NotNull(statement);
+        Assert.Equal("prose", statement!.Shape);
+        Assert.Empty(statement.Entries);
+        Assert.Equal("All authors contributed to the study's conception and design.", statement.Raw);
+    }
+
+    [Fact]
+    public void BuildPhase3Document_NoCreditOutcome_LeavesCreditStatementNullAndTagsUnchanged()
+    {
+        var xml = FullyInjectedXml();
+        var report = new Report();
+        report.Info("credit-roles", "Injected 1 <role> for 'JR' (AutoApplied): Writing – original draft.");
+        report.Warn("phase3", "gate");
+
+        var doc = DiagnosticWriter.BuildPhase3Document("x.xml", xml, report, EmptyDispositions(), null, FixedTime);
+
+        Assert.Null(doc.Phase3!.CreditStatement);
+        Assert.Equal(("credit-roles", "1", "autoApplied"), Tuple(doc.Phase3.CreditRoles));
+
+        var json = JsonSerializer.Serialize(doc, DiagnosticWriter.JsonOptions);
+        Assert.Contains("\"creditStatement\": null", json);
+    }
+
+    [Fact]
+    public void WritePhase3_BelowWarn_WithCreditOutcome_StillDoesNotWriteFile()
+    {
+        // ADR-005 (credit-corpus-v26n3-fixes): "always" means whenever a diagnostic
+        // is written; the WARN gate is unchanged even when an outcome exists.
+        var xml = FullyInjectedXml();
+        var report = new Report();
+        report.Info("credit-roles", "Injected 2 <role> for 'TVB' (AutoApplied): Data curation, Formal analysis.");
+
+        var path = Path.Combine(_tempDir, "clean-with-outcome.diagnostic.json");
+        var written = DiagnosticWriter.WritePhase3(path, "x.xml", xml, report, EmptyDispositions(), TwoEntryOutcome());
+
+        Assert.False(written);
+        Assert.False(File.Exists(path));
     }
 
     private static IReadOnlyDictionary<string, ConfirmDisposition> EmptyDispositions()

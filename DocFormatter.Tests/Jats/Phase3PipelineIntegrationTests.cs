@@ -1,18 +1,40 @@
 using System.Xml.Linq;
 using DocFormatter.Core.Jats;
 using DocFormatter.Core.Pipeline;
+using DocFormatter.Tests.Fixtures.Phase3;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DocFormatter.Tests.Jats;
 
 /// <summary>
 /// Exercises <see cref="Phase3Pipeline"/> end-to-end over a real
-/// <see cref="Phase3Context"/> with stub injectors that both mutate the target
+/// <see cref="Phase3Context"/>: with stub injectors that both mutate the target
 /// <see cref="XDocument"/> and route a value through the <see cref="IConfirmer"/>
-/// gate, asserting ordered report entries and that only the XML is changed.
+/// gate, asserting ordered report entries and that only the XML is changed; and
+/// with the registered injectors over a docx read by <see cref="DocxSourceReader"/>.
 /// </summary>
-public sealed class Phase3PipelineIntegrationTests
+public sealed class Phase3PipelineIntegrationTests : IDisposable
 {
+    private readonly string _tempDir;
+
+    public Phase3PipelineIntegrationTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), $"docfmt-phase3-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_tempDir, recursive: true); } catch { /* best effort */ }
+    }
+
+    private sealed class ThrowingConfirmer : IConfirmer
+    {
+        public ConfirmResult Confirm(Proposal proposal)
+            => throw new InvalidOperationException($"unexpected prompt from '{proposal.Tag}': {proposal.Reason}");
+    }
+
     private sealed class AppendChildInjector : IJatsInjector
     {
         private readonly string _childName;
@@ -97,4 +119,156 @@ public sealed class Phase3PipelineIntegrationTests
         Assert.Equal("edited-by", seen.Tag);
         Assert.Equal("Jane Roe", seen.ProposedValue);
     }
+
+    [Fact]
+    public void Run_RegisteredInjectors_OverParagraphTaggedSemicolonCreditDocx_InjectsAllRoles_NoWarn()
+    {
+        // CBAB v26n3 layout (ADR-003): the CREDIT body is [p]-tagged and uses ';'
+        // between terms and between author entries. The reader must strip the
+        // tags, the parser must accept the separators, and the resolver must map
+        // the bare initials, so the whole document auto-applies without a prompt.
+        var docxPath = Path.Combine(_tempDir, "5613.docx");
+        Phase3DocxFixtureBuilder.WriteMarkupDocxWithCreditStatement(
+            docxPath,
+            Phase3DocxFixtureBuilder.ParagraphTaggedSemicolonCreditText);
+        var source = new DocxSourceReader().Read(docxPath);
+
+        var xml = ArticleWithDoiAndContribs(
+            Contrib("Costa", "Ana Beatriz"),
+            Contrib("Ferreira", "Daniel Eduardo"),
+            Contrib("Iglesias", "Gabriel Henrique"));
+        var ctx = new Phase3Context
+        {
+            Source = source,
+            Xml = xml,
+            OtherNumber = "00301",
+            Confirm = new ThrowingConfirmer(),
+        };
+        var report = new Report();
+
+        using var provider = new ServiceCollection().AddPhase3Injectors().BuildServiceProvider();
+        new Phase3Pipeline(provider.GetServices<IJatsInjector>()).Run(ctx, report);
+
+        // Reader: [p]/[/p] stripped, header seen.
+        Assert.Equal("ABC; DEF: Conceptualization; Methodology. GHI: Software.", source.CreditStatementRaw);
+        Assert.True(source.CreditHeaderFound);
+
+        // Injector: every contributor received its CRediT roles, in statement order.
+        Assert.Equal(
+            new[] { "Conceptualization", "Methodology" },
+            RolesOf(xml, "Costa").Select(r => r.Value));
+        Assert.Equal(
+            new[] { "Conceptualization", "Methodology" },
+            RolesOf(xml, "Ferreira").Select(r => r.Value));
+        Assert.Equal(new[] { "Software" }, RolesOf(xml, "Iglesias").Select(r => r.Value));
+        Assert.All(
+            xml.Descendants().Where(e => e.Name.LocalName == "role"),
+            r => Assert.StartsWith("http://credit.niso.org/contributor-roles/", (string?)r.Attribute("content-type"), StringComparison.Ordinal));
+
+        // Report: nothing at WARN or above across the whole pipeline.
+        Assert.Equal(ReportLevel.Info, report.HighestLevel);
+        Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn);
+
+        // Outcome (ADR-005): auto-applied, every entry resolved and applied.
+        Assert.NotNull(ctx.Credit);
+        Assert.Equal(CreditDisposition.AutoApplied, ctx.Credit!.Disposition);
+        Assert.Equal(CreditShape.AuthorKeyed, ctx.Credit.Shape);
+        Assert.Equal(new[] { "ABC", "DEF", "GHI" }, ctx.Credit.Entries.Select(e => e.AuthorKey));
+        Assert.All(ctx.Credit.Entries, e =>
+        {
+            Assert.Equal(CreditResolution.Resolved, e.Resolution);
+            Assert.True(e.Applied);
+            Assert.Empty(e.UnknownTerms);
+        });
+    }
+
+    [Fact]
+    public void Run_RegisteredInjectors_OneBrokenSurname_WarnsAndStillInjectsCredit()
+    {
+        // ADR-002: a <surname> holding an ORCID is reported by contrib-names, but
+        // credit-roles still resolves "GHI" through the given-names tier
+        // (ADR-004) and injects its roles — the byline fix and the CRediT mapping
+        // are independent pendencies.
+        var docxPath = Path.Combine(_tempDir, "5316.docx");
+        Phase3DocxFixtureBuilder.WriteMarkupDocxWithCreditStatement(
+            docxPath,
+            Phase3DocxFixtureBuilder.ParagraphTaggedSemicolonCreditText);
+        var source = new DocxSourceReader().Read(docxPath);
+
+        var xml = ArticleWithDoiAndContribs(
+            Contrib("Costa", "Ana Beatriz"),
+            Contrib("Ferreira", "Daniel Eduardo"),
+            Contrib("0009-0008-3948-7334", "Gabriel Henrique Iglesias"));
+        var ctx = new Phase3Context
+        {
+            Source = source,
+            Xml = xml,
+            OtherNumber = "00301",
+            Confirm = new ThrowingConfirmer(),
+        };
+        var report = new Report();
+
+        using var provider = new ServiceCollection().AddPhase3Injectors().BuildServiceProvider();
+        new Phase3Pipeline(provider.GetServices<IJatsInjector>()).Run(ctx, report);
+
+        // contrib-names: exactly one WARN, naming the third contributor and the ORCID.
+        var broken = Assert.Single(report.Entries, e => e.Rule == "contrib-names");
+        Assert.Equal(ReportLevel.Warn, broken.Level);
+        Assert.Contains("#3", broken.Message, StringComparison.Ordinal);
+        Assert.Contains("0009-0008-3948-7334", broken.Message, StringComparison.Ordinal);
+
+        // contrib-names runs before credit-roles.
+        var rules = report.Entries.Select(e => e.Rule).ToList();
+        Assert.True(rules.IndexOf("contrib-names") < rules.IndexOf("credit-roles"));
+
+        // credit-roles: not blocked — every contributor, including the broken one,
+        // received its roles without a prompt, and nothing else warned.
+        Assert.Equal(
+            new[] { "Conceptualization", "Methodology" },
+            RolesOf(xml, "Costa").Select(r => r.Value));
+        Assert.Equal(
+            new[] { "Conceptualization", "Methodology" },
+            RolesOf(xml, "Ferreira").Select(r => r.Value));
+        Assert.Equal(new[] { "Software" }, RolesOf(xml, "0009-0008-3948-7334").Select(r => r.Value));
+        Assert.DoesNotContain(report.Entries, e => e.Level >= ReportLevel.Warn && e.Rule != "contrib-names");
+
+        Assert.NotNull(ctx.Credit);
+        Assert.Equal(CreditDisposition.AutoApplied, ctx.Credit!.Disposition);
+        Assert.All(ctx.Credit.Entries, e => Assert.True(e.Applied));
+    }
+
+    private static string Contrib(string surname, string givenNames)
+        => "\t\t\t\t<contrib contrib-type=\"author\">\n" +
+           "\t\t\t\t\t<name>\n" +
+           $"\t\t\t\t\t\t<surname>{surname}</surname>\n" +
+           $"\t\t\t\t\t\t<given-names>{givenNames}</given-names>\n" +
+           "\t\t\t\t\t</name>\n" +
+           "\t\t\t\t\t<xref ref-type=\"aff\" rid=\"aff1\">1</xref>\n" +
+           "\t\t\t\t</contrib>\n";
+
+    /// <summary>
+    /// A minimal JATS front with the DOI <c>article-id</c> the Critical
+    /// <c>other-id</c> injector anchors on, plus the given contributors.
+    /// </summary>
+    private static XDocument ArticleWithDoiAndContribs(params string[] contribs)
+        => XDocument.Parse(
+            "<article>\n" +
+            "\t<front>\n" +
+            "\t\t<article-meta>\n" +
+            $"\t\t\t<article-id pub-id-type=\"doi\">{Phase3DocxFixtureBuilder.MarkupDoi}</article-id>\n" +
+            "\t\t\t<contrib-group>\n" +
+            string.Concat(contribs) +
+            "\t\t\t</contrib-group>\n" +
+            "\t\t</article-meta>\n" +
+            "\t</front>\n" +
+            "</article>\n",
+            LoadOptions.PreserveWhitespace);
+
+    private static IReadOnlyList<XElement> RolesOf(XDocument xml, string surname)
+        => xml.Descendants()
+            .Single(e => e.Name.LocalName == "contrib"
+                && e.Descendants().Any(n => n.Name.LocalName == "surname" && n.Value == surname))
+            .Elements()
+            .Where(e => e.Name.LocalName == "role")
+            .ToList();
 }

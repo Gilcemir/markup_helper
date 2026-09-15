@@ -39,8 +39,9 @@ public static class CreditStatementParser
     /// <summary>
     /// Detects the shape of <paramref name="raw"/> and parses it. Role-keyed is
     /// tried first (every <c>;</c>-chunk is <c>label: values</c> and the first
-    /// label maps to a CRediT term), then author-keyed (<c>.</c>-separated
-    /// <c>keys: terms</c> entries whose terms map), else prose.
+    /// label maps to a CRediT term), then author-keyed (<c>keys: terms</c>
+    /// entries separated by <c>.</c>, <c>;</c> or <c>,</c>, terms separated by
+    /// <c>;</c> or <c>,</c>, at least one term mapping — ADR-003), else prose.
     /// </summary>
     public static CreditStatement Parse(string? raw)
     {
@@ -121,10 +122,18 @@ public static class CreditStatementParser
     }
 
     /// <summary>
-    /// Author-keyed: <c>ATAJ: Conceptualization, Methodology. DRSJ; TOS: …</c>.
-    /// Entries are <c>.</c>-separated; each is <c>keys: terms</c> where keys are
-    /// <c>;</c>-separated initials sharing the comma-separated <c>terms</c>. At
-    /// least one term must map to a CRediT term (the discriminator).
+    /// Author-keyed (ADR-003): <c>ATAJ: Conceptualization; Methodology. DRSJ; TOS: Investigation, Data curation.</c>
+    /// The text is split into <c>.</c>-segments; each must be <c>keys: rest</c>,
+    /// where <c>keys</c> are <c>;</c>/<c>,</c>-separated initials sharing the same
+    /// terms. <c>rest</c> is split on <c>;</c> and <c>,</c> into pieces read by
+    /// shape: a piece with a <c>:</c> opens a new entry (<c>CDC: Methodology</c>);
+    /// a piece that is an initials block (<see cref="AuthorInitialsResolver.IsInitialsToken"/>)
+    /// is a pending key attached to the entry the next <c>:</c> piece opens
+    /// (<c>Conceptualization; CFA; MN; CDC: Methodology</c> → CFA, MN and CDC share
+    /// Methodology); any other piece is a term of the current entry. The statement
+    /// is not author-keyed when a segment has no <c>:</c>, an entry ends without
+    /// terms, pending keys are never closed by a <c>:</c> piece, an initials block
+    /// is followed by a term, or no term maps to a CRediT term (the discriminator).
     /// </summary>
     private static bool TryParseAuthorKeyed(string text, out IReadOnlyList<CreditEntry> entries)
     {
@@ -132,35 +141,76 @@ public static class CreditStatementParser
 
         var builder = new EntryBuilder();
         var anyMappedTerm = false;
-        foreach (var rawEntry in text.Split('.'))
+        foreach (var rawSegment in text.Split('.'))
         {
-            var entry = rawEntry.Trim();
-            if (entry.Length == 0)
+            var segment = rawSegment.Trim();
+            if (segment.Length == 0)
             {
                 continue; // trailing separator artifact (e.g. the closing '.')
             }
 
-            var colon = entry.IndexOf(':', StringComparison.Ordinal);
+            var colon = segment.IndexOf(':', StringComparison.Ordinal);
             if (colon < 0)
             {
-                return false; // a non-empty segment that is not "keys: terms" → not cleanly author-keyed
+                return false; // a non-empty segment that is not "keys: …" → not cleanly author-keyed
             }
 
-            var keys = SplitTrim(entry[..colon], ';');
-            var terms = SplitTrim(entry[(colon + 1)..], ',');
-            if (keys.Count == 0 || terms.Count == 0)
+            var keys = SplitTrim(segment[..colon], ';', ',');
+            if (keys.Count == 0)
             {
-                return false; // malformed author-keyed segment → fall back to prose and prompt
+                return false; // ": terms" with no key
             }
 
-            anyMappedTerm |= terms.Any(t => CreditTermTable.TryMap(t, out _));
-            foreach (var key in keys)
+            var terms = new List<string>();
+            var pending = new List<string>();
+            foreach (var piece in SplitTrim(segment[(colon + 1)..], ';', ','))
             {
-                foreach (var term in terms)
+                var pieceColon = piece.IndexOf(':', StringComparison.Ordinal);
+                if (pieceColon >= 0)
                 {
-                    builder.Add(key, term);
+                    if (terms.Count == 0)
+                    {
+                        return false; // the entry being closed has no terms
+                    }
+
+                    anyMappedTerm |= Flush(builder, keys, terms);
+
+                    // The pending initials blocks plus this piece's own key open the next entry.
+                    pending.Add(piece[..pieceColon].Trim());
+                    keys = pending.Where(k => k.Length > 0).ToList();
+                    if (keys.Count == 0)
+                    {
+                        return false; // ": terms" with no key
+                    }
+
+                    pending = new List<string>();
+                    terms = new List<string>();
+                    var firstTerm = piece[(pieceColon + 1)..].Trim();
+                    if (firstTerm.Length > 0)
+                    {
+                        terms.Add(firstTerm);
+                    }
+                }
+                else if (AuthorInitialsResolver.IsInitialsToken(piece))
+                {
+                    pending.Add(piece); // co-key of the entry the next ':' piece opens
+                }
+                else if (pending.Count > 0)
+                {
+                    return false; // an initials block followed by a term instead of ':'
+                }
+                else
+                {
+                    terms.Add(piece);
                 }
             }
+
+            if (pending.Count > 0 || terms.Count == 0)
+            {
+                return false; // keys never closed by ':' / entry without terms → prompt
+            }
+
+            anyMappedTerm |= Flush(builder, keys, terms);
         }
 
         if (!anyMappedTerm || builder.IsEmpty)
@@ -172,8 +222,25 @@ public static class CreditStatementParser
         return true;
     }
 
-    private static List<string> SplitTrim(string value, char separator)
-        => value.Split(separator)
+    /// <summary>
+    /// Adds every <paramref name="terms"/> to every <paramref name="keys"/> and
+    /// reports whether any term maps to a CRediT term.
+    /// </summary>
+    private static bool Flush(EntryBuilder builder, IReadOnlyList<string> keys, IReadOnlyList<string> terms)
+    {
+        foreach (var key in keys)
+        {
+            foreach (var term in terms)
+            {
+                builder.Add(key, term);
+            }
+        }
+
+        return terms.Any(t => CreditTermTable.TryMap(t, out _));
+    }
+
+    private static List<string> SplitTrim(string value, params char[] separators)
+        => value.Split(separators)
             .Select(s => s.Trim())
             .Where(s => s.Length > 0)
             .ToList();

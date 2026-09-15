@@ -64,6 +64,7 @@ public sealed partial class DocxSourceReader
             AssociateEditor = FindEditor(paragraphs, AssociateEditorRegex()),
             DataAvailabilityText = ExtractSection(segments, "DATA AVAILABILITY"),
             CreditStatementRaw = ExtractSection(segments, "CREDIT STATEMENT"),
+            CreditHeaderFound = segments.Contains("CREDIT STATEMENT", StringComparer.Ordinal),
         };
     }
 
@@ -211,7 +212,10 @@ public sealed partial class DocxSourceReader
                 break;
             }
 
-            var trimmed = segment.Trim();
+            // A body paragraph may itself be tagged [p]…[/p] (observed on 5536);
+            // those tags are formatting, not a section terminator, so they are
+            // removed before the bracket test below (ADR-003).
+            var trimmed = StripParagraphTags(segment).Trim();
             if (trimmed.Length == 0)
             {
                 // Empty segment: the split artifact before a glued header or a
@@ -220,7 +224,7 @@ public sealed partial class DocxSourceReader
             }
 
             // The trailing prose ends at the next bracket-tagged paragraph
-            // ([refs], [corresp], …) or a bare REFERENCES heading.
+            // ([refs], [ack], [corresp], …) or a bare REFERENCES heading.
             if (trimmed[0] == '[' || trimmed.StartsWith("REFERENCES", StringComparison.OrdinalIgnoreCase))
             {
                 break;
@@ -231,6 +235,9 @@ public sealed partial class DocxSourceReader
 
         return body.Count == 0 ? null : string.Join(" ", body);
     }
+
+    private static string StripParagraphTags(string segment)
+        => ParagraphTagRegex().Replace(segment, string.Empty);
 
     private static bool IsSectionHeader(string segment)
     {
@@ -282,6 +289,9 @@ public sealed partial class DocxSourceReader
 
     [GeneratedRegex(@"\[doi\](.*?)\[/doi\]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline)]
     private static partial Regex DoiRegex();
+
+    [GeneratedRegex(@"\[/?p\]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ParagraphTagRegex();
 
     [GeneratedRegex(@"scientific\s+editor\s*:\s*(.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ScientificEditorRegex();

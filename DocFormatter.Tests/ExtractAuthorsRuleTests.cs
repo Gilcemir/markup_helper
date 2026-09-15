@@ -183,6 +183,142 @@ public sealed class ExtractAuthorsRuleTests
         Assert.Equal(ExtractAuthorsRule.MissingAuthorsParagraphMessage, warn.Message);
     }
 
+    // ── plain-text ORCID and repeated name token (credit-corpus-v26n3-fixes ADR-006) ──
+
+    [Fact]
+    public void Apply_WithPlainTextOrcidAfterName_ExtractsIdAndCleansName()
+    {
+        // CBAB 5316 shape: the id sits in the byline as text, before the label.
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Pablo de Sousa Arantes 0009-0008-3948-7334"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Pablo de Sousa Arantes", author.Name);
+        Assert.Equal("0009-0008-3948-7334", author.OrcidId);
+        Assert.Equal(new[] { "1" }, author.AffiliationLabels);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+        Assert.Single(report.Entries, e => e.Level == ReportLevel.Info
+            && e.Message.Contains("extracted ORCID '0009-0008-3948-7334' from plain text", StringComparison.Ordinal));
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Warn || e.Level == ReportLevel.Error);
+    }
+
+    [Fact]
+    public void Apply_WithPlainTextOrcidGluedToSurname_SplitsIdFromName()
+    {
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Adriano Teodoro Bruzi0000-0001-6909-5157"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Adriano Teodoro Bruzi", author.Name);
+        Assert.Equal("0000-0001-6909-5157", author.OrcidId);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+    }
+
+    [Fact]
+    public void Apply_WithPlainTextOrcidUrl_DropsTheUrlPrefixFromTheName()
+    {
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Ana Silva https://orcid.org/0000-0002-1825-0097"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Ana Silva", author.Name);
+        Assert.Equal("0000-0002-1825-0097", author.OrcidId);
+        Assert.DoesNotContain("orcid.org", author.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Apply_WithPlainTextOrcidsForTwoAuthors_AttachesEachToItsOwnAuthor()
+    {
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Ana Silva 0000-0001-0000-0001, Bruno Costa 0000-0002-0000-0002"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Equal(2, ctx.Authors.Count);
+        Assert.Equal("Ana Silva", ctx.Authors[0].Name);
+        Assert.Equal("0000-0001-0000-0001", ctx.Authors[0].OrcidId);
+        Assert.Equal("Bruno Costa", ctx.Authors[1].Name);
+        Assert.Equal("0000-0002-0000-0002", ctx.Authors[1].OrcidId);
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Warn || e.Level == ReportLevel.Error);
+    }
+
+    [Fact]
+    public void Apply_WithHyperlinkOrcidAndDifferentPlainTextOrcid_KeepsHyperlinkIdAndWarns()
+    {
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph();
+        var mainPart = GetMainPart(doc);
+        var rel = mainPart.AddHyperlinkRelationship(new Uri("https://orcid.org/0000-0002-1825-0097"), true);
+        var authors = AuthorsParagraphFactory.GetAuthorsParagraph(doc);
+        authors.AppendChild(AuthorsParagraphFactory.Hyperlink(
+            rel.Id, AuthorsParagraphFactory.TextRun("José Silva")));
+        authors.AppendChild(AuthorsParagraphFactory.TextRun(" 0000-0003-1111-2222"));
+        authors.AppendChild(AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("José Silva", author.Name);
+        Assert.Equal("0000-0002-1825-0097", author.OrcidId);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+        Assert.Contains(report.Entries, e => e.Level == ReportLevel.Warn
+            && e.Message.Contains("conflicting ORCID '0000-0003-1111-2222'", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_WithLastNameTokenRepeatingAnEarlierToken_WarnsWithoutLoweringConfidence()
+    {
+        // CBAB 5613: Markup's markup_surname_and_fname tags the FIRST "Nguyen".
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Nguyen Hoai Nguyen"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        var author = Assert.Single(ctx.Authors);
+        Assert.Equal("Nguyen Hoai Nguyen", author.Name);
+        Assert.Equal(AuthorConfidence.High, author.Confidence);
+        Assert.Contains(report.Entries, e => e.Level == ReportLevel.Warn
+            && e.Message.Contains("'Nguyen' repeats an earlier token", StringComparison.Ordinal)
+            && e.Message.Contains("mark_authors", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_WithDistinctNameTokens_DoesNotWarnAboutRepetition()
+    {
+        using var doc = AuthorsParagraphFactory.CreateDocumentWithAuthorsParagraph(
+            AuthorsParagraphFactory.TextRun("Ana Maria Silva"),
+            AuthorsParagraphFactory.SuperscriptRun("1"));
+
+        var ctx = new FormattingContext();
+        var report = new Report();
+        CreateRule().Apply(doc, ctx, report);
+
+        Assert.Equal(AuthorConfidence.High, Assert.Single(ctx.Authors).Confidence);
+        Assert.DoesNotContain(report.Entries, e => e.Level == ReportLevel.Warn || e.Level == ReportLevel.Error);
+    }
+
     [Fact]
     public void Apply_WithOrcidHyperlinkWrappingId_AttachesIdAndDropsHyperlink()
     {

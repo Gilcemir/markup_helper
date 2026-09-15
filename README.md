@@ -2,9 +2,9 @@
 
 CLI em .NET 10 que prepara artigos científicos para o fluxo SciELO, em três fases:
 
-- **Phase 1** — normaliza o `.docx` segundo regras editoriais fixas: extrai DOI/elocation/autores/afiliações/abstract/keywords da folha-rosto crua, reescreve o cabeçalho no formato de saída, promove níveis de seção e remove hyperlinks descartáveis (incluindo ORCID).
+- **Phase 1** — normaliza o `.docx` segundo regras editoriais fixas: extrai DOI/elocation/autores/afiliações/abstract/keywords da folha-rosto crua, reescreve o cabeçalho no formato de saída, promove níveis de seção e remove hyperlinks descartáveis (incluindo ORCID). Um ORCID escrito como texto puro na linha de autores (com ou sem `https://orcid.org/`, mesmo colado ao sobrenome) é extraído para o autor e sai do nome; um nome cujo último token repete um anterior (ex.: "Nguyen Hoai Nguyen") gera `[WARN]`, porque o `mark_authors` do SciELO Markup marca a primeira ocorrência como sobrenome.
 - **Phase 2** — injeta as bracket tags do SciELO Markup no `.docx` (abstract/keywords/elocation/corresp/hist/author-xrefs).
-- **Phase 3** — pós-processa o XML JATS gerado pelo SciELO Markup, injetando as quatro marcações SPS 1.10 que a ferramenta não gera: `article-id pub-id-type="other"`, `fn fn-type="edited-by"`, `sec sec-type="data-availability"` e CRediT `<role>`.
+- **Phase 3** — pós-processa o XML JATS gerado pelo SciELO Markup, injetando as quatro marcações SPS 1.10 que a ferramenta não gera: `article-id pub-id-type="other"`, `fn fn-type="edited-by"`, `sec sec-type="data-availability"` e CRediT `<role>`. Uma quinta regra, `contrib-names`, só verifica: emite `[WARN]` para cada `<contrib>` cujo `<surname>` está vazio ou contém dígitos/ORCID (marcação quebrada no Markup), sem tocar no XML.
 
 Desenvolvido no macOS, executado no Windows 10 como `docformatter.exe` self-contained.
 
@@ -64,6 +64,24 @@ docformatter phase3 "C:\caminho\pasta" --non-interactive=fail     # aborta em qu
 ```
 
 O phase3 pareia cada XML com seu docx-fonte e com o `other.txt` sozinho: sobe diretórios a partir do XML até achar o `other.txt` (o `scielo_markup/` ao lado contém os docx) — sem flags extras. Pareamento é por elocation-id, verificado com DOI; sem a flag `--non-interactive`, casos ambíguos são confirmados interativamente no console.
+
+#### CRediT (phase 3): o que é lido, o que é reportado
+
+- **Statement aceito.** O `CREDIT STATEMENT` do docx é lido mesmo quando o parágrafo está marcado `[p]…[/p]`; qualquer outra tag de colchete (`[refs]`, `[ack]`…) encerra a seção. Header presente com corpo vazio vira `[WARN]`, nunca silêncio.
+- **Gramática.** Além de `Termo: autor, autor; Termo: …` (por papel), aceita statements por autor com `;` ou `,` entre termos e `;`, `,` ou `.` entre entradas — inclusive `CFA; MN: Conceptualization; CFA; MN; CDC: Methodology.`, em que blocos de iniciais antes de um `X:` são co-chaves da entrada seguinte. Prosa livre continua indo para prompt.
+- **Iniciais.** Candidatos completos (nome+sobrenome, com/sem sufixo) têm prioridade sobre só-nome; sobrenome com hífen gera uma ou duas iniciais (`LB`/`LBB`); partícula capitalizada (`Van`, `Da`) conta ou não (`TVB`/`TB`). A resolução continua exigindo unicidade.
+- **`_batch_summary.txt`.** Artigo limpo fica em uma linha. Artigo com pendência ganha linhas indentadas:
+
+  ```
+  1984-7033-cbab-26-03-e56132631.xml ✓ prompted
+    credit: applied TVB, QHTP; pending NHN (notFound)
+    contrib-names: 1 broken surname(s)
+  1984-7033-cbab-26-03-e571926315.xml ✓ prompted
+    credit: already present LRS, GFPA; pending MRC (notFound)
+  ```
+
+  `applied` = roles escritos nesta execução; `already present` = `<contrib>` que já tinha `<role>` (re-execução sobre XML já injetado, não é pendência); `pending X (razão)` com `notFound`, `ambiguous`, `unknown term: …` ou a disposição do documento (`skipped`). Statement em prosa, header vazio e ausência de statement têm frases fixas (`free prose (not auto-applied)`, `header found, body empty`, `no CREDIT STATEMENT on the docx`).
+- **`.diagnostic.json`.** Quando gravado (há `[WARN]` ou acima), `phase3.creditStatement` traz `raw` (o texto do statement como lido), `shape` (`authorKeyed`/`roleKeyed`/`prose`) e `entries[]` com `authorKey`, `terms`, `resolution`, `unknownTerms`, `applied` e `alreadyPresent` — dá para diagnosticar um artigo pendente sem reabrir o docx.
 
 Saída padrão da pasta `formatted/`:
 

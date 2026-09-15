@@ -32,7 +32,16 @@ public sealed class DocxSource
     /// <summary>
     /// The CREDIT STATEMENT body text returned verbatim and unparsed; shape
     /// detection (role-keyed / author-keyed / prose) belongs to a later task.
-    /// <see langword="null"/> when the section is absent.
+    /// <see langword="null"/> when the section is absent or its body is empty.
     /// </summary>
     public string? CreditStatementRaw { get; init; }
+
+    /// <summary>
+    /// <see langword="true"/> when the <c>CREDIT STATEMENT</c> header was found,
+    /// regardless of whether a body followed it. Lets the injector distinguish
+    /// an absent statement (INFO) from a present header with an emptied body
+    /// (WARN, INV-02) when <see cref="CreditStatementRaw"/> is
+    /// <see langword="null"/>.
+    /// </summary>
+    public bool CreditHeaderFound { get; init; }
 }
