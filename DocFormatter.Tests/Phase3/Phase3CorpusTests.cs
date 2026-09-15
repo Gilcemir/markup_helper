@@ -21,10 +21,12 @@ namespace DocFormatter.Tests.Phase3;
 public sealed class Phase3CorpusTests
 {
     private const string NamePrefix = "1984-7033-cbab-26-02-";
+    private const string V26N3Prefix = "1984-7033-cbab-26-03-";
 
-    // The single fully-deterministic document: author-keyed CRediT with all terms
+    // A fully-deterministic document: author-keyed CRediT with all terms
     // exact-mapping and all initials resolving, plus an auto-classified
-    // data-availability category. It is the only document that does NOT prompt.
+    // data-availability category. It is the only 26-02 document that does NOT
+    // prompt (11 of the 15 26-03 documents are deterministic as well).
     private const string AutoBasename = NamePrefix + "e51362627"; // docx 5136
 
     // Representative CRediT shapes (ADR-005), by paired docx basename:
@@ -52,6 +54,15 @@ public sealed class Phase3CorpusTests
         NamePrefix + "e554926210",
         NamePrefix + "e557026213",
         NamePrefix + "e564026215",
+
+        // 26-03: every statement is author-keyed and parses; these four prompt
+        // only because one author key does not resolve to any <contrib>
+        // (MAF/JAN, TTR, JGS, MRC — initials that skip a middle name or carry a
+        // letter absent from the byline).
+        V26N3Prefix + "e53162636",
+        V26N3Prefix + "e55292638",
+        V26N3Prefix + "e561726310",
+        V26N3Prefix + "e571926315",
     };
 
     private const string CreditRoleSignature = "content-type=\"http://credit.niso.org/contributor-roles/";
